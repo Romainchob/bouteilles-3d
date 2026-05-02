@@ -4,83 +4,153 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Bouteilles 3D</title>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100%; height: 100%;
-      background: transparent;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #container {
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      gap: 8px;
-      padding: 20px;
-    }
-    .bottle-wrap {
-      flex: 1;
-      height: 100%;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      cursor: pointer;
-      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-      transform-origin: bottom center;
-    }
-    .bottle-wrap:hover {
-      transform: translateY(-28px) rotate(var(--tilt, 4deg));
-    }
-    model-viewer {
-      width: 100%;
-      height: 90%;
-      background: transparent;
-      --progress-bar-color: transparent;
-      --progress-mask: transparent;
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    canvas { display: block; }
+    #msg {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-family: sans-serif; font-size: 14px; color: #666;
     }
   </style>
 </head>
 <body>
-  <div id="container"></div>
+  <div id="msg">Chargement Three.js...</div>
+
+  <!-- Three.js via unpkg — le CDN le plus fiable -->
+  <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.150.0/examples/js/loaders/GLTFLoader.js"></script>
 
   <script>
+    document.getElementById('msg').textContent = 'Chargement des bouteilles...'
+
+    // ── Paramètres ──────────────────────────────────────────────────────────
     const p     = new URLSearchParams(window.location.search)
-    const container = document.getElementById('container')
-    const tilts = ['4deg', '-4deg', '4deg', '-4deg', '4deg']
-
+    const scale = parseFloat(p.get('scale') || '1')
+    const cam   = parseFloat(p.get('cam')   || '7')
+    const urls  = [], links = []
     for (let i = 1; i <= 5; i++) {
-      const url  = p.get('url'  + i)
-      const link = p.get('link' + i) || '/'
-      if (!url) continue
-
-      const wrap = document.createElement('div')
-      wrap.className = 'bottle-wrap'
-      wrap.style.setProperty('--tilt', tilts[i - 1])
-
-      const mv = document.createElement('model-viewer')
-      mv.setAttribute('src', url)
-      mv.setAttribute('shadow-intensity', '0.8')
-      mv.setAttribute('shadow-softness', '1')
-      mv.setAttribute('exposure', '1.1')
-      mv.setAttribute('environment-image', 'neutral')
-      mv.setAttribute('disable-zoom', '')
-      mv.setAttribute('interaction-prompt', 'none')
-      mv.setAttribute('camera-controls', '')
-
-      wrap.appendChild(mv)
-      wrap.addEventListener('click', () => {
-        window.parent.postMessage({ type: 'navigate', link }, '*')
-        window.top.location.href = link
-      })
-
-      container.appendChild(wrap)
+      const u = p.get('url' + i)
+      if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
     }
+
+    // ── Renderer ────────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.outputEncoding = THREE.sRGBEncoding
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.2
+    document.body.appendChild(renderer.domElement)
+
+    // ── Scène ───────────────────────────────────────────────────────────────
+    const scene  = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
+    camera.position.set(0, 0.5, cam)
+    camera.lookAt(0, 0, 0)
+
+    // ── Lumières ────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+    const l1 = new THREE.DirectionalLight(0xffffff, 1.5)
+    l1.position.set(5, 8, 5)
+    scene.add(l1)
+    const l2 = new THREE.DirectionalLight(0xffffff, 0.5)
+    l2.position.set(-5, 3, -3)
+    scene.add(l2)
+    const l3 = new THREE.DirectionalLight(0xffffff, 0.3)
+    l3.position.set(0, -2, 5)
+    scene.add(l3)
+
+    // ── Chargement GLB ──────────────────────────────────────────────────────
+    const loader   = new THREE.GLTFLoader()
+    const models   = []
+    const hovering = {}
+    const spacing  = 1.6
+    const startX   = urls.length > 0 ? -((urls.length - 1) * spacing) / 2 : 0
+    let   done     = 0
+
+    urls.forEach((url, i) => {
+      loader.load(url, (gltf) => {
+        const obj = gltf.scene
+        // Normaliser taille & centrer sur la base
+        const box    = new THREE.Box3().setFromObject(obj)
+        const size   = box.getSize(new THREE.Vector3())
+        const center = box.getCenter(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z)
+        obj.scale.setScalar((1.8 * scale) / maxDim)
+        obj.position.set(
+          -center.x * (1.8 * scale) / maxDim,
+          -center.y * (1.8 * scale) / maxDim + (size.y * (1.8 * scale) / maxDim) / 2,
+          -center.z * (1.8 * scale) / maxDim
+        )
+        const group = new THREE.Group()
+        group.add(obj)
+        group.position.set(startX + i * spacing, 0, 0)
+        scene.add(group)
+        hovering[i] = false
+        models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
+        done++
+        if (done === urls.length) document.getElementById('msg').style.display = 'none'
+      },
+      undefined,
+      (err) => {
+        console.error('GLB error:', url, err)
+        done++
+        if (done === urls.length) document.getElementById('msg').textContent = 'Erreur de chargement.'
+      })
+    })
+
+    if (urls.length === 0) document.getElementById('msg').textContent = 'Aucune bouteille configurée.'
+
+    // ── Raycaster ───────────────────────────────────────────────────────────
+    const ray   = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    function hit(e) {
+      const r = renderer.domElement.getBoundingClientRect()
+      mouse.set(
+        ((e.clientX - r.left) / r.width)  * 2 - 1,
+        -((e.clientY - r.top)  / r.height) * 2 + 1
+      )
+      ray.setFromCamera(mouse, camera)
+      const hits = ray.intersectObjects(models.map(m => m.group), true)
+      if (!hits.length) return null
+      let o = hits[0].object
+      while (o.parent && !models.find(m => m.group === o)) o = o.parent
+      return models.find(m => m.group === o) || null
+    }
+
+    window.addEventListener('mousemove', e => {
+      models.forEach(m => hovering[m.idx] = false)
+      const h = hit(e)
+      if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
+      else renderer.domElement.style.cursor = 'default'
+    })
+
+    window.addEventListener('click', e => {
+      const h = hit(e)
+      if (h) {
+        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+        try { window.top.location.href = h.link } catch(e) {}
+      }
+    })
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight
+      camera.updateProjectionMatrix()
+      renderer.setSize(window.innerWidth, window.innerHeight)
+    })
+
+    // ── Animation ───────────────────────────────────────────────────────────
+    ;(function animate() {
+      requestAnimationFrame(animate)
+      models.forEach(m => {
+        const h = hovering[m.idx]
+        m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
+        m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
+      })
+      renderer.render(scene, camera)
+    })()
   </script>
 </body>
 </html>
