@@ -27,14 +27,21 @@
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-    const msg   = document.getElementById('msg')
-    const p     = new URLSearchParams(window.location.search)
-    const scale = parseFloat(p.get('scale') || '1')
-    const cam   = parseFloat(p.get('cam') || '8')
-    const urls  = [], links = []
+    const msg     = document.getElementById('msg')
+    const p       = new URLSearchParams(window.location.search)
+    const cam     = parseFloat(p.get('cam') || '7')
+    const spacing = parseFloat(p.get('spacing') || '1.4')
+    const rotY    = parseFloat(p.get('roty') || '0') // rotation Y en degrés
+
+    // Récupère les bouteilles avec scale individuel
+    const bottles = []
     for (let i = 1; i <= 5; i++) {
-      const u = p.get('url' + i)
-      if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
+      const url = p.get('url' + i)
+      if (url) bottles.push({
+        url,
+        link:  p.get('link' + i) || '/',
+        scale: parseFloat(p.get('scale' + i) || p.get('scale') || '1'),
+      })
     }
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -57,62 +64,55 @@
     const loader  = new GLTFLoader()
     const models  = []
     const hovered = {}
-    const spacing = 1.8
-    const startX  = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
+    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
     let done = 0
 
-    function placeModel(gltf, i) {
+    function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
 
-      // ── Étape 1 : ajouter temporairement à la scène pour avoir la vraie bounding box
+      // Appliquer rotation Y pour orienter vers la caméra
+      obj.rotation.y = THREE.MathUtils.degToRad(rotY)
+
+      // Ajouter temporairement pour calcul de bounding box
       const tmp = new THREE.Group()
       tmp.add(obj)
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
 
-      // ── Étape 2 : calculer la bounding box monde réelle
-      const box1  = new THREE.Box3().setFromObject(tmp)
-      const size1 = box1.getSize(new THREE.Vector3())
+      const box1   = new THREE.Box3().setFromObject(tmp)
+      const size1  = box1.getSize(new THREE.Vector3())
       const maxDim = Math.max(size1.x, size1.y, size1.z)
 
-      // ── Étape 3 : retirer et rescaler
       scene.remove(tmp)
-      const s = (1.8 * scale) / maxDim
+      const s = (1.8 * bottleScale) / maxDim
       tmp.scale.setScalar(s)
 
-      // ── Étape 4 : recalculer après scale
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
       const box2   = new THREE.Box3().setFromObject(tmp)
       const center = box2.getCenter(new THREE.Vector3())
-
-      // ── Étape 5 : centrer X/Z et poser la base à Y=0
       tmp.position.x -= center.x
       tmp.position.z -= center.z
       tmp.position.y -= box2.min.y
       scene.remove(tmp)
 
-      // ── Étape 6 : mettre dans le groupe final positionné
       const group = new THREE.Group()
       group.add(tmp)
       group.position.set(startX + i * spacing, 0, 0)
       scene.add(group)
 
       hovered[i] = false
-      models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
+      models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
 
       done++
-      if (done === urls.length) {
-        msg.style.display = 'none'
-      }
+      if (done === bottles.length) msg.style.display = 'none'
     }
 
-    urls.forEach((url, i) => {
-      loader.load(url, (gltf) => {
-        placeModel(gltf, i)
+    bottles.forEach((bottle, i) => {
+      loader.load(bottle.url, (gltf) => {
+        placeModel(gltf, i, bottle.scale)
       }, undefined, (err) => {
-        console.error('GLB error:', url, err)
-        msg.textContent = 'Erreur : ' + (err.message || err)
+        console.error('GLB error:', bottle.url, err)
         done++
       })
     })
