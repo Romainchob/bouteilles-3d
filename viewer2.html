@@ -50,6 +50,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.shadowMap.enabled = true
     renderer.toneMappingExposure = 1.2
     document.body.style.background = bg
     document.body.appendChild(renderer.domElement)
@@ -74,6 +75,21 @@
 
       // Appliquer rotation Y pour orienter vers la caméra
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
+
+        // Fix matériaux verre
+        obj.traverse((child) => {
+          if (child.isMesh && child.material) {
+            const mat = child.material
+            if (mat.transmission > 0 || mat.opacity < 1 || (mat.name && mat.name.toLowerCase().includes("glass"))) {
+              mat.transparent = true
+              mat.transmission = mat.transmission || 0.95
+              mat.thickness = mat.thickness || 0.5
+              mat.roughness = Math.min(mat.roughness, 0.05)
+              mat.envMapIntensity = 2
+              mat.needsUpdate = true
+            }
+          }
+        })
 
       // Ajouter temporairement pour calcul de bounding box
       const tmp = new THREE.Group()
