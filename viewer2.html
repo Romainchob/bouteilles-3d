@@ -27,131 +27,143 @@
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-    const msg = document.getElementById('msg')
-
-    const p     = new URLSearchParams(window.location.search)
-    const scale = parseFloat(p.get('scale') || '1')
-    const cam   = parseFloat(p.get('cam') || '7')
-    const urls  = []
-    const links = []
+    const msg    = document.getElementById('msg')
+    const p      = new URLSearchParams(window.location.search)
+    const scale  = parseFloat(p.get('scale') || '1')
+    const cam    = parseFloat(p.get('cam') || '7')
+    const urls   = []
+    const links  = []
 
     for (let i = 1; i <= 5; i++) {
       const u = p.get('url' + i)
       if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
     }
 
-    if (!urls.length) {
-      msg.textContent = 'Aucune bouteille configurée.'
-    } else {
-      msg.textContent = 'Chargement de ' + urls.length + ' bouteille(s)...'
+    if (!urls.length) { msg.textContent = 'Aucune bouteille.'; }
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-      renderer.setSize(window.innerWidth, window.innerHeight)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-      renderer.outputColorSpace = THREE.SRGBColorSpace
-      renderer.toneMapping = THREE.ACESFilmicToneMapping
-      renderer.toneMappingExposure = 1.2
-      document.body.appendChild(renderer.domElement)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.2
+    document.body.appendChild(renderer.domElement)
 
-      const scene  = new THREE.Scene()
-      const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
-      camera.position.set(0, 0.5, cam)
-      camera.lookAt(0, 0, 0)
+    const scene  = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
+    camera.position.set(0, 1, cam)
+    camera.lookAt(0, 1, 0)
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-      const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
-      const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
-      const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+    const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
+    const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
+    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
 
-      const loader   = new GLTFLoader()
-      const models   = []
-      const hovering = {}
-      const spacing  = 1.6
-      const startX   = -((urls.length - 1) * spacing) / 2
-      let done = 0
+    const loader   = new GLTFLoader()
+    const models   = []
+    const hovering = {}
+    const spacing  = 1.8
+    const startX   = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
+    let done = 0
 
-      urls.forEach((url, i) => {
-        loader.load(url,
-          (gltf) => {
-            const obj    = gltf.scene
-            const box    = new THREE.Box3().setFromObject(obj)
-            const size   = box.getSize(new THREE.Vector3())
-            const center = box.getCenter(new THREE.Vector3())
-            const maxDim = Math.max(size.x, size.y, size.z)
-            const s      = (1.8 * scale) / maxDim
-            obj.scale.setScalar(s)
-            obj.position.set(
-              -center.x * s,
-              -center.y * s + (size.y * s) / 2,
-              -center.z * s
-            )
-            const group = new THREE.Group()
-            group.add(obj)
-            group.position.set(startX + i * spacing, 0, 0)
-            scene.add(group)
-            hovering[i] = false
-            models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
-            done++
-            if (done === urls.length) msg.style.display = 'none'
-          },
-          undefined,
-          (err) => {
-            console.error('GLB error:', url, err)
-            msg.textContent = 'Erreur GLB : ' + (err.message || err)
-            done++
-          }
-        )
-      })
+    urls.forEach((url, i) => {
+      loader.load(url, (gltf) => {
+        const obj = gltf.scene
 
-      const ray = new THREE.Raycaster()
-      const mouse = new THREE.Vector2()
+        // ── Normalisation robuste — fonctionne peu importe l'origine Blender ──
+        // 1. Calculer la bounding box AVANT scaling
+        const box1   = new THREE.Box3().setFromObject(obj)
+        const size1  = box1.getSize(new THREE.Vector3())
+        const maxDim = Math.max(size1.x, size1.y, size1.z)
 
-      function getHit(e) {
-        const r = renderer.domElement.getBoundingClientRect()
-        mouse.set(
-          ((e.clientX - r.left) / r.width) * 2 - 1,
-          -((e.clientY - r.top) / r.height) * 2 + 1
-        )
-        ray.setFromCamera(mouse, camera)
-        const hits = ray.intersectObjects(models.map(m => m.group), true)
-        if (!hits.length) return null
-        let o = hits[0].object
-        while (o.parent && !models.find(m => m.group === o)) o = o.parent
-        return models.find(m => m.group === o) || null
-      }
+        // 2. Appliquer le scale pour que la plus grande dimension = 1.8
+        const s = (1.8 * scale) / maxDim
+        obj.scale.setScalar(s)
 
-      window.addEventListener('mousemove', e => {
-        models.forEach(m => hovering[m.idx] = false)
-        const h = getHit(e)
-        if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
-        else renderer.domElement.style.cursor = 'default'
-      })
+        // 3. Recalculer la bounding box APRÈS scaling
+        obj.updateMatrixWorld(true)
+        const box2   = new THREE.Box3().setFromObject(obj)
+        const center = box2.getCenter(new THREE.Vector3())
 
-      window.addEventListener('click', e => {
-        const h = getHit(e)
-        if (h && h.link) {
-          window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
-          try { window.top.location.href = h.link } catch(e) {}
-        }
-      })
+        // 4. Centrer X/Z et poser la base en Y=0
+        obj.position.x -= center.x
+        obj.position.z -= center.z
+        obj.position.y -= box2.min.y  // base à Y=0
 
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight
-        camera.updateProjectionMatrix()
-        renderer.setSize(window.innerWidth, window.innerHeight)
-      })
+        // 5. Créer le groupe et positionner côte à côte
+        const group = new THREE.Group()
+        group.add(obj)
+        group.position.set(startX + i * spacing, 0, 0)
+        scene.add(group)
 
-      function animate() {
-        requestAnimationFrame(animate)
-        models.forEach(m => {
-          const h = hovering[m.idx]
-          m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
-          m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
+        hovering[i] = false
+        models.push({
+          group,
+          baseY: 0,
+          tiltDir: i % 2 === 0 ? 1 : -1,
+          link: links[i],
+          idx: i
         })
-        renderer.render(scene, camera)
-      }
-      animate()
+
+        done++
+        if (done === urls.length) msg.style.display = 'none'
+
+      }, undefined, (err) => {
+        console.error('GLB error:', url, err)
+        msg.textContent = 'Erreur : ' + (err.message || err)
+        done++
+        if (done === urls.length) msg.style.display = 'none'
+      })
+    })
+
+    const ray   = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    function getHit(e) {
+      const r = renderer.domElement.getBoundingClientRect()
+      mouse.set(
+        ((e.clientX - r.left) / r.width) * 2 - 1,
+        -((e.clientY - r.top) / r.height) * 2 + 1
+      )
+      ray.setFromCamera(mouse, camera)
+      const hits = ray.intersectObjects(models.map(m => m.group), true)
+      if (!hits.length) return null
+      let o = hits[0].object
+      while (o.parent && !models.find(m => m.group === o)) o = o.parent
+      return models.find(m => m.group === o) || null
     }
+
+    window.addEventListener('mousemove', e => {
+      models.forEach(m => hovering[m.idx] = false)
+      const h = getHit(e)
+      if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
+      else renderer.domElement.style.cursor = 'default'
+    })
+
+    window.addEventListener('click', e => {
+      const h = getHit(e)
+      if (h && h.link) {
+        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+        try { window.top.location.href = h.link } catch(e) {}
+      }
+    })
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight
+      camera.updateProjectionMatrix()
+      renderer.setSize(window.innerWidth, window.innerHeight)
+    })
+
+    function animate() {
+      requestAnimationFrame(animate)
+      models.forEach(m => {
+        const h = hovering[m.idx]
+        m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
+        m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
+      })
+      renderer.render(scene, camera)
+    }
+    animate()
   </script>
 </body>
 </html>
