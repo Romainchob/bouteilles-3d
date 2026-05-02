@@ -24,7 +24,6 @@
   <script type="module">
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 
     const msg     = document.getElementById('msg')
     const p       = new URLSearchParams(window.location.search)
@@ -32,7 +31,7 @@
     const spacing = parseFloat(p.get('spacing') || '1.4')
     const rotY    = parseFloat(p.get('roty') || '270')
 
-    const seen    = new Set()
+    const seen = new Set()
     const bottles = []
     for (let i = 1; i <= 5; i++) {
       const url = p.get('url' + i)
@@ -42,14 +41,12 @@
       }
     }
 
-    // ── Renderer ──────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.0
-    renderer.shadowMap.enabled = true
+    renderer.toneMappingExposure = 1.2
     document.body.appendChild(renderer.domElement)
 
     const scene  = new THREE.Scene()
@@ -57,48 +54,11 @@
     camera.position.set(0, 1, cam)
     camera.lookAt(0, 1, 0)
 
-    // ── Lumières réalistes ────────────────────────────────────────────────
-    const ambient = new THREE.AmbientLight(0xffffff, 0.3)
-    scene.add(ambient)
-
-    const key = new THREE.DirectionalLight(0xfff5e0, 2.5)
-    key.position.set(3, 6, 4)
-    scene.add(key)
-
-    const fill = new THREE.DirectionalLight(0xe0f0ff, 1.0)
-    fill.position.set(-4, 3, -2)
-    scene.add(fill)
-
-    const rim = new THREE.DirectionalLight(0xffffff, 1.5)
-    rim.position.set(0, 4, -5)
-    scene.add(rim)
-
-    const bottom = new THREE.DirectionalLight(0xffffff, 0.5)
-    bottom.position.set(0, -3, 3)
-    scene.add(bottom)
-
-    // ── Environment map pour reflets réalistes ────────────────────────────
-    const pmremGenerator = new THREE.PMREMGenerator(renderer)
-    pmremGenerator.compileEquirectangularShader()
-
-    // Créer un env map procédural (ciel + sol)
-    const envScene = new THREE.Scene()
-    const envGeo   = new THREE.SphereGeometry(50, 32, 32)
-    const envMat   = new THREE.MeshBasicMaterial({
-      side: THREE.BackSide,
-      color: 0xc8d8e8,
-    })
-    envScene.add(new THREE.Mesh(envGeo, envMat))
-    const envRT  = pmremGenerator.fromScene(new THREE.RoomEnvironment(), 0.04)
-    scene.environment = envRT.texture
-    pmremGenerator.dispose()
-
-    // ── Chargement GLB ────────────────────────────────────────────────────
-    const loader  = new GLTFLoader()
-    const models  = []
-    const hovered = {}
-    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
-    let done = 0
+    // Lumières simples mais efficaces
+    scene.add(new THREE.AmbientLight(0xffffff, 1.2))
+    const l1 = new THREE.DirectionalLight(0xfff5e0, 2.5); l1.position.set(3, 6, 4); scene.add(l1)
+    const l2 = new THREE.DirectionalLight(0xe0f0ff, 1.0); l2.position.set(-4, 3, -2); scene.add(l2)
+    const l3 = new THREE.DirectionalLight(0xffffff, 1.5); l3.position.set(0, 4, -5); scene.add(l3)
 
     function fixMaterials(obj) {
       obj.traverse((child) => {
@@ -110,42 +70,37 @@
           const isGlass = mat.transmission > 0 ||
                           name.includes('glass') ||
                           name.includes('verre') ||
-                          name.includes('bottle') ||
-                          (mat.opacity < 0.99 && mat.transparent)
-
+                          name.includes('wine') && !name.includes('label')
           if (isGlass) {
-            // Verre réaliste
-            mat.transmission    = 0.92
+            mat.transmission    = 0.88
             mat.transparent     = true
-            mat.opacity         = 1
-            mat.roughness       = 0.03
+            mat.roughness       = 0.04
             mat.metalness       = 0.0
-            mat.thickness       = 1.5
-            mat.envMapIntensity = 3.0
+            mat.envMapIntensity = 2.0
             mat.ior             = 1.52
-            mat.attenuationDistance = 0.5
-            if (!mat.attenuationColor) mat.attenuationColor = new THREE.Color(0.2, 0.6, 0.2)
-            mat.side = THREE.FrontSide
           } else {
-            // Matériaux opaques (étiquettes etc)
-            mat.envMapIntensity = 1.5
+            mat.envMapIntensity = 1.2
           }
           mat.needsUpdate = true
         })
       })
     }
 
+    const loader  = new GLTFLoader()
+    const models  = []
+    const hovered = {}
+    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
+    let done = 0
+
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
-
       fixMaterials(obj)
 
       const tmp = new THREE.Group()
       tmp.add(obj)
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
-
       const box1   = new THREE.Box3().setFromObject(tmp)
       const size1  = box1.getSize(new THREE.Vector3())
       const maxDim = Math.max(size1.x, size1.y, size1.z)
@@ -153,7 +108,6 @@
 
       const s = (1.8 * bottleScale) / maxDim
       tmp.scale.setScalar(s)
-
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
       const box2   = new THREE.Box3().setFromObject(tmp)
@@ -170,24 +124,16 @@
 
       hovered[i] = false
       models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
-
       done++
       if (done === bottles.length) msg.style.display = 'none'
     }
 
     bottles.forEach((bottle, i) => {
-      loader.load(bottle.url, (gltf) => {
-        placeModel(gltf, i, bottle.scale)
-      }, undefined, (err) => {
-        console.error('GLB error:', bottle.url, err)
-        done++
-      })
+      loader.load(bottle.url, (gltf) => placeModel(gltf, i, bottle.scale),
+        undefined, (err) => { console.error(err); done++ })
     })
 
-    // ── Raycaster ─────────────────────────────────────────────────────────
-    const ray   = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
-
+    const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
     function getHit(e) {
       const r = renderer.domElement.getBoundingClientRect()
       mouse.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1)
@@ -205,15 +151,10 @@
       if (h) { hovered[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
       else renderer.domElement.style.cursor = 'default'
     })
-
     window.addEventListener('click', e => {
       const h = getHit(e)
-      if (h && h.link) {
-        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
-        try { window.top.location.href = h.link } catch(e) {}
-      }
+      if (h?.link) { window.parent.postMessage({ type: 'navigate', link: h.link }, '*'); try { window.top.location.href = h.link } catch(e) {} }
     })
-
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
