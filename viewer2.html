@@ -183,7 +183,7 @@
     })
     window.addEventListener('click', e => {
       const h = getHit(e)
-      if (h?.link) { window.parent.postMessage({ type: 'navigate', link: h.link }, '*'); try { window.top.location.href = h.link } catch(e) {} }
+      if (h?.link) { window.parent.postMessage({ type: 'navigate', link: h.link }, '*'); window.open(h.link, '_top') }
     })
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
