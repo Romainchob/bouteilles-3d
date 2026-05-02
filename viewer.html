@@ -8,114 +8,146 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
     canvas { display: block; }
-    #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: sans-serif; font-size: 14px; color: #666; }
+    #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: sans-serif; font-size: 13px; color: #555; text-align: center; }
   </style>
 </head>
 <body>
   <div id="msg">Chargement...</div>
 
   <script type="module">
-    import * as THREE from 'https://cdn.skypack.dev/three@0.150.0'
-    import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.150.0/examples/jsm/loaders/GLTFLoader.js'
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js'
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/GLTFLoader.js'
 
-    const msg = document.getElementById('msg')
-    msg.textContent = 'Chargement des bouteilles...'
+    async function init() {
+      const msg   = document.getElementById('msg')
+      const p     = new URLSearchParams(window.location.search)
+      const scale = parseFloat(p.get('scale') || '1')
+      const cam   = parseFloat(p.get('cam') || '7')
+      const urls  = [], links = []
 
-    const p     = new URLSearchParams(window.location.search)
-    const scale = parseFloat(p.get('scale') || '1')
-    const cam   = parseFloat(p.get('cam')   || '7')
-    const urls = [], links = []
-    for (let i = 1; i <= 5; i++) {
-      const u = p.get('url' + i)
-      if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
-    }
-    if (!urls.length) { msg.textContent = 'Aucune bouteille.'; }
+      for (let i = 1; i <= 5; i++) {
+        const u = p.get('url' + i)
+        if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
+      }
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.outputEncoding = THREE.sRGBEncoding
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
-    document.body.appendChild(renderer.domElement)
+      if (!urls.length) {
+        msg.textContent = 'Aucune bouteille configurée.'
+        return
+      }
 
-    const scene  = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
-    camera.position.set(0, 0.5, cam)
-    camera.lookAt(0, 0, 0)
+      msg.textContent = `Chargement de ${urls.length} bouteille(s)...`
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
-    const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
-    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
-
-    const loader  = new GLTFLoader()
-    const models  = []
-    const hovering = {}
-    const spacing = 1.6
-    const startX  = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
-    let done = 0
-
-    urls.forEach((url, i) => {
-      loader.load(url, (gltf) => {
-        const obj = gltf.scene
-        const box    = new THREE.Box3().setFromObject(obj)
-        const size   = box.getSize(new THREE.Vector3())
-        const center = box.getCenter(new THREE.Vector3())
-        const maxDim = Math.max(size.x, size.y, size.z)
-        const s = (1.8 * scale) / maxDim
-        obj.scale.setScalar(s)
-        obj.position.set(-center.x * s, -center.y * s + (size.y * s) / 2, -center.z * s)
-        const group = new THREE.Group()
-        group.add(obj)
-        group.position.set(startX + i * spacing, 0, 0)
-        scene.add(group)
-        hovering[i] = false
-        models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
-        done++
-        if (done === urls.length) msg.style.display = 'none'
-      }, undefined, (err) => {
-        console.error('GLB error:', url, err)
-        done++
-        if (done === urls.length) msg.style.display = 'none'
-      })
-    })
-
-    const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
-    function getHit(e) {
-      const r = renderer.domElement.getBoundingClientRect()
-      mouse.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1)
-      ray.setFromCamera(mouse, camera)
-      const hits = ray.intersectObjects(models.map(m => m.group), true)
-      if (!hits.length) return null
-      let o = hits[0].object
-      while (o.parent && !models.find(m => m.group === o)) o = o.parent
-      return models.find(m => m.group === o) || null
-    }
-    window.addEventListener('mousemove', e => {
-      models.forEach(m => hovering[m.idx] = false)
-      const h = getHit(e)
-      if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
-      else renderer.domElement.style.cursor = 'default'
-    })
-    window.addEventListener('click', e => {
-      const h = getHit(e)
-      if (h) { window.parent.postMessage({ type: 'navigate', link: h.link }, '*'); try { window.top.location.href = h.link } catch(e){} }
-    })
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight
-      camera.updateProjectionMatrix()
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
       renderer.setSize(window.innerWidth, window.innerHeight)
-    })
-    ;(function animate() {
-      requestAnimationFrame(animate)
-      models.forEach(m => {
-        const h = hovering[m.idx]
-        m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
-        m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.outputEncoding = THREE.sRGBEncoding
+      renderer.toneMapping = THREE.ACESFilmicToneMapping
+      renderer.toneMappingExposure = 1.2
+      document.body.appendChild(renderer.domElement)
+
+      const scene  = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
+      camera.position.set(0, 0.5, cam)
+      camera.lookAt(0, 0, 0)
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+      const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
+      const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
+      const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
+
+      const loader   = new GLTFLoader()
+      const models   = []
+      const hovering = {}
+      const spacing  = 1.6
+      const startX   = -((urls.length - 1) * spacing) / 2
+      let done = 0
+
+      urls.forEach((url, i) => {
+        loader.load(url,
+          (gltf) => {
+            const obj    = gltf.scene
+            const box    = new THREE.Box3().setFromObject(obj)
+            const size   = box.getSize(new THREE.Vector3())
+            const center = box.getCenter(new THREE.Vector3())
+            const maxDim = Math.max(size.x, size.y, size.z)
+            const s      = (1.8 * scale) / maxDim
+            obj.scale.setScalar(s)
+            obj.position.set(
+              -center.x * s,
+              -center.y * s + (size.y * s) / 2,
+              -center.z * s
+            )
+            const group = new THREE.Group()
+            group.add(obj)
+            group.position.set(startX + i * spacing, 0, 0)
+            scene.add(group)
+            hovering[i] = false
+            models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
+            done++
+            if (done === urls.length) msg.style.display = 'none'
+          },
+          undefined,
+          (err) => {
+            console.error('GLB error:', url, err)
+            msg.textContent = '❌ ' + (err.message || err)
+            done++
+          }
+        )
       })
-      renderer.render(scene, camera)
-    })()
+
+      const ray = new THREE.Raycaster()
+      const mouse = new THREE.Vector2()
+
+      function getHit(e) {
+        const r = renderer.domElement.getBoundingClientRect()
+        mouse.set(
+          ((e.clientX - r.left) / r.width) * 2 - 1,
+          -((e.clientY - r.top) / r.height) * 2 + 1
+        )
+        ray.setFromCamera(mouse, camera)
+        const hits = ray.intersectObjects(models.map(m => m.group), true)
+        if (!hits.length) return null
+        let o = hits[0].object
+        while (o.parent && !models.find(m => m.group === o)) o = o.parent
+        return models.find(m => m.group === o) || null
+      }
+
+      window.addEventListener('mousemove', e => {
+        models.forEach(m => hovering[m.idx] = false)
+        const h = getHit(e)
+        if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
+        else renderer.domElement.style.cursor = 'default'
+      })
+
+      window.addEventListener('click', e => {
+        const h = getHit(e)
+        if (h?.link) {
+          window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+          try { window.top.location.href = h.link } catch (e) {}
+        }
+      })
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(window.innerWidth, window.innerHeight)
+      })
+
+      ;(function animate() {
+        requestAnimationFrame(animate)
+        models.forEach(m => {
+          const h = hovering[m.idx]
+          m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
+          m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
+        })
+        renderer.render(scene, camera)
+      })()
+    }
+
+    init().catch(err => {
+      document.getElementById('msg').textContent = '❌ Erreur : ' + err.message
+      console.error(err)
+    })
   </script>
 </body>
 </html>
