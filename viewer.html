@@ -8,33 +8,29 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
     canvas { display: block; }
-    #msg {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-      font-family: sans-serif; font-size: 14px; color: #666;
-    }
+    #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: sans-serif; font-size: 14px; color: #666; }
   </style>
 </head>
 <body>
-  <div id="msg">Chargement Three.js...</div>
+  <div id="msg">Chargement...</div>
 
-  <!-- Three.js via unpkg — le CDN le plus fiable -->
-  <script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.150.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.150.0'
+    import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.150.0/examples/jsm/loaders/GLTFLoader.js'
 
-  <script>
-    document.getElementById('msg').textContent = 'Chargement des bouteilles...'
+    const msg = document.getElementById('msg')
+    msg.textContent = 'Chargement des bouteilles...'
 
-    // ── Paramètres ──────────────────────────────────────────────────────────
     const p     = new URLSearchParams(window.location.search)
     const scale = parseFloat(p.get('scale') || '1')
     const cam   = parseFloat(p.get('cam')   || '7')
-    const urls  = [], links = []
+    const urls = [], links = []
     for (let i = 1; i <= 5; i++) {
       const u = p.get('url' + i)
       if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
     }
+    if (!urls.length) { msg.textContent = 'Aucune bouteille.'; }
 
-    // ── Renderer ────────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -43,46 +39,33 @@
     renderer.toneMappingExposure = 1.2
     document.body.appendChild(renderer.domElement)
 
-    // ── Scène ───────────────────────────────────────────────────────────────
     const scene  = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
     camera.position.set(0, 0.5, cam)
     camera.lookAt(0, 0, 0)
 
-    // ── Lumières ────────────────────────────────────────────────────────────
     scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const l1 = new THREE.DirectionalLight(0xffffff, 1.5)
-    l1.position.set(5, 8, 5)
-    scene.add(l1)
-    const l2 = new THREE.DirectionalLight(0xffffff, 0.5)
-    l2.position.set(-5, 3, -3)
-    scene.add(l2)
-    const l3 = new THREE.DirectionalLight(0xffffff, 0.3)
-    l3.position.set(0, -2, 5)
-    scene.add(l3)
+    const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
+    const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
+    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
 
-    // ── Chargement GLB ──────────────────────────────────────────────────────
-    const loader   = new THREE.GLTFLoader()
-    const models   = []
+    const loader  = new GLTFLoader()
+    const models  = []
     const hovering = {}
-    const spacing  = 1.6
-    const startX   = urls.length > 0 ? -((urls.length - 1) * spacing) / 2 : 0
-    let   done     = 0
+    const spacing = 1.6
+    const startX  = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
+    let done = 0
 
     urls.forEach((url, i) => {
       loader.load(url, (gltf) => {
         const obj = gltf.scene
-        // Normaliser taille & centrer sur la base
         const box    = new THREE.Box3().setFromObject(obj)
         const size   = box.getSize(new THREE.Vector3())
         const center = box.getCenter(new THREE.Vector3())
         const maxDim = Math.max(size.x, size.y, size.z)
-        obj.scale.setScalar((1.8 * scale) / maxDim)
-        obj.position.set(
-          -center.x * (1.8 * scale) / maxDim,
-          -center.y * (1.8 * scale) / maxDim + (size.y * (1.8 * scale) / maxDim) / 2,
-          -center.z * (1.8 * scale) / maxDim
-        )
+        const s = (1.8 * scale) / maxDim
+        obj.scale.setScalar(s)
+        obj.position.set(-center.x * s, -center.y * s + (size.y * s) / 2, -center.z * s)
         const group = new THREE.Group()
         group.add(obj)
         group.position.set(startX + i * spacing, 0, 0)
@@ -90,28 +73,18 @@
         hovering[i] = false
         models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
         done++
-        if (done === urls.length) document.getElementById('msg').style.display = 'none'
-      },
-      undefined,
-      (err) => {
+        if (done === urls.length) msg.style.display = 'none'
+      }, undefined, (err) => {
         console.error('GLB error:', url, err)
         done++
-        if (done === urls.length) document.getElementById('msg').textContent = 'Erreur de chargement.'
+        if (done === urls.length) msg.style.display = 'none'
       })
     })
 
-    if (urls.length === 0) document.getElementById('msg').textContent = 'Aucune bouteille configurée.'
-
-    // ── Raycaster ───────────────────────────────────────────────────────────
-    const ray   = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
-
-    function hit(e) {
+    const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
+    function getHit(e) {
       const r = renderer.domElement.getBoundingClientRect()
-      mouse.set(
-        ((e.clientX - r.left) / r.width)  * 2 - 1,
-        -((e.clientY - r.top)  / r.height) * 2 + 1
-      )
+      mouse.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1)
       ray.setFromCamera(mouse, camera)
       const hits = ray.intersectObjects(models.map(m => m.group), true)
       if (!hits.length) return null
@@ -119,29 +92,21 @@
       while (o.parent && !models.find(m => m.group === o)) o = o.parent
       return models.find(m => m.group === o) || null
     }
-
     window.addEventListener('mousemove', e => {
       models.forEach(m => hovering[m.idx] = false)
-      const h = hit(e)
+      const h = getHit(e)
       if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
       else renderer.domElement.style.cursor = 'default'
     })
-
     window.addEventListener('click', e => {
-      const h = hit(e)
-      if (h) {
-        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
-        try { window.top.location.href = h.link } catch(e) {}
-      }
+      const h = getHit(e)
+      if (h) { window.parent.postMessage({ type: 'navigate', link: h.link }, '*'); try { window.top.location.href = h.link } catch(e){} }
     })
-
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
     })
-
-    // ── Animation ───────────────────────────────────────────────────────────
     ;(function animate() {
       requestAnimationFrame(animate)
       models.forEach(m => {
