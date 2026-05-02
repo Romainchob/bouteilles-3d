@@ -27,19 +27,15 @@
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-    const msg    = document.getElementById('msg')
-    const p      = new URLSearchParams(window.location.search)
-    const scale  = parseFloat(p.get('scale') || '1')
-    const cam    = parseFloat(p.get('cam') || '7')
-    const urls   = []
-    const links  = []
-
+    const msg   = document.getElementById('msg')
+    const p     = new URLSearchParams(window.location.search)
+    const scale = parseFloat(p.get('scale') || '1')
+    const cam   = parseFloat(p.get('cam') || '8')
+    const urls  = [], links = []
     for (let i = 1; i <= 5; i++) {
       const u = p.get('url' + i)
       if (u) { urls.push(u); links.push(p.get('link' + i) || '/') }
     }
-
-    if (!urls.length) { msg.textContent = 'Aucune bouteille.'; }
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
@@ -50,69 +46,74 @@
     document.body.appendChild(renderer.domElement)
 
     const scene  = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000)
     camera.position.set(0, 1, cam)
     camera.lookAt(0, 1, 0)
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+    scene.add(new THREE.AmbientLight(0xffffff, 1))
     const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
     const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
-    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
 
-    const loader   = new GLTFLoader()
-    const models   = []
-    const hovering = {}
-    const spacing  = 1.8
-    const startX   = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
+    const loader  = new GLTFLoader()
+    const models  = []
+    const hovered = {}
+    const spacing = 1.8
+    const startX  = urls.length ? -((urls.length - 1) * spacing) / 2 : 0
     let done = 0
+
+    function placeModel(gltf, i) {
+      const obj = gltf.scene
+
+      // ── Étape 1 : ajouter temporairement à la scène pour avoir la vraie bounding box
+      const tmp = new THREE.Group()
+      tmp.add(obj)
+      scene.add(tmp)
+      tmp.updateMatrixWorld(true)
+
+      // ── Étape 2 : calculer la bounding box monde réelle
+      const box1  = new THREE.Box3().setFromObject(tmp)
+      const size1 = box1.getSize(new THREE.Vector3())
+      const maxDim = Math.max(size1.x, size1.y, size1.z)
+
+      // ── Étape 3 : retirer et rescaler
+      scene.remove(tmp)
+      const s = (1.8 * scale) / maxDim
+      tmp.scale.setScalar(s)
+
+      // ── Étape 4 : recalculer après scale
+      scene.add(tmp)
+      tmp.updateMatrixWorld(true)
+      const box2   = new THREE.Box3().setFromObject(tmp)
+      const center = box2.getCenter(new THREE.Vector3())
+
+      // ── Étape 5 : centrer X/Z et poser la base à Y=0
+      tmp.position.x -= center.x
+      tmp.position.z -= center.z
+      tmp.position.y -= box2.min.y
+      scene.remove(tmp)
+
+      // ── Étape 6 : mettre dans le groupe final positionné
+      const group = new THREE.Group()
+      group.add(tmp)
+      group.position.set(startX + i * spacing, 0, 0)
+      scene.add(group)
+
+      hovered[i] = false
+      models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: links[i], idx: i })
+
+      done++
+      if (done === urls.length) {
+        msg.style.display = 'none'
+      }
+    }
 
     urls.forEach((url, i) => {
       loader.load(url, (gltf) => {
-        const obj = gltf.scene
-
-        // ── Normalisation robuste — fonctionne peu importe l'origine Blender ──
-        // 1. Calculer la bounding box AVANT scaling
-        const box1   = new THREE.Box3().setFromObject(obj)
-        const size1  = box1.getSize(new THREE.Vector3())
-        const maxDim = Math.max(size1.x, size1.y, size1.z)
-
-        // 2. Appliquer le scale pour que la plus grande dimension = 1.8
-        const s = (1.8 * scale) / maxDim
-        obj.scale.setScalar(s)
-
-        // 3. Recalculer la bounding box APRÈS scaling
-        obj.updateMatrixWorld(true)
-        const box2   = new THREE.Box3().setFromObject(obj)
-        const center = box2.getCenter(new THREE.Vector3())
-
-        // 4. Centrer X/Z et poser la base en Y=0
-        obj.position.x -= center.x
-        obj.position.z -= center.z
-        obj.position.y -= box2.min.y  // base à Y=0
-
-        // 5. Créer le groupe et positionner côte à côte
-        const group = new THREE.Group()
-        group.add(obj)
-        group.position.set(startX + i * spacing, 0, 0)
-        scene.add(group)
-
-        hovering[i] = false
-        models.push({
-          group,
-          baseY: 0,
-          tiltDir: i % 2 === 0 ? 1 : -1,
-          link: links[i],
-          idx: i
-        })
-
-        done++
-        if (done === urls.length) msg.style.display = 'none'
-
+        placeModel(gltf, i)
       }, undefined, (err) => {
         console.error('GLB error:', url, err)
         msg.textContent = 'Erreur : ' + (err.message || err)
         done++
-        if (done === urls.length) msg.style.display = 'none'
       })
     })
 
@@ -134,9 +135,9 @@
     }
 
     window.addEventListener('mousemove', e => {
-      models.forEach(m => hovering[m.idx] = false)
+      models.forEach(m => hovered[m.idx] = false)
       const h = getHit(e)
-      if (h) { hovering[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
+      if (h) { hovered[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
       else renderer.domElement.style.cursor = 'default'
     })
 
@@ -144,7 +145,7 @@
       const h = getHit(e)
       if (h && h.link) {
         window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
-        try { window.top.location.href = h.link } catch(e) {}
+        try { window.top.location.href = h.link } catch (e) {}
       }
     })
 
@@ -157,7 +158,7 @@
     function animate() {
       requestAnimationFrame(animate)
       models.forEach(m => {
-        const h = hovering[m.idx]
+        const h = hovered[m.idx]
         m.group.position.y += ((h ? 0.22 : m.baseY) - m.group.position.y) * 0.09
         m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
       })
