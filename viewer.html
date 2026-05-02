@@ -1,3 +1,6 @@
+Viewer · HTML
+Copier
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,166 +10,129 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
-    canvas { display: block; }
     #loading {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      color: white; font-family: sans-serif; font-size: 14px;
-      background: transparent;
+      font-family: sans-serif; font-size: 13px; color: #888;
     }
   </style>
 </head>
 <body>
   <div id="loading">Chargement...</div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
-
-  <script>
-    // ─── Lire les paramètres URL ──────────────────────────────────────────────
-    const params = new URLSearchParams(window.location.search)
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.150.0'
+    import { GLTFLoader } from 'https://esm.sh/three@0.150.0/examples/jsm/loaders/GLTFLoader.js'
+ 
+    const p           = new URLSearchParams(window.location.search)
+    const bottleScale = parseFloat(p.get('scale') || '1')
+    const camDist     = parseFloat(p.get('cam')   || '6')
     const bottles = []
     for (let i = 1; i <= 5; i++) {
-      const url  = params.get("url"  + i)
-      const link = params.get("link" + i)
+      const url  = p.get('url'  + i)
+      const link = p.get('link' + i) || '/'
       if (url) bottles.push({ url, link })
     }
-    const bgColor     = params.get("bg")       || "transparent"
-    const bottleScale = parseFloat(params.get("scale") || "1")
-    const camDist     = parseFloat(params.get("cam")   || "6")
-
-    // ─── Setup Three.js ──────────────────────────────────────────────────────
+    if (bottles.length === 0) {
+      document.getElementById('loading').textContent = 'Aucune bouteille configurée.'
+    }
+ 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
-    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputEncoding = THREE.sRGBEncoding
-    renderer.physicallyCorrectLights = true
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.2
     document.body.appendChild(renderer.domElement)
-
+ 
     const scene  = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100)
     camera.position.set(0, 0.5, camDist)
     camera.lookAt(0, 0, 0)
-
-    // ─── Lumières ────────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
-    const dir1 = new THREE.DirectionalLight(0xffffff, 1.2)
-    dir1.position.set(4, 6, 4)
-    scene.add(dir1)
-    const dir2 = new THREE.DirectionalLight(0xffffff, 0.5)
-    dir2.position.set(-4, 3, -3)
-    scene.add(dir2)
-    const dir3 = new THREE.DirectionalLight(0xffffff, 0.3)
-    dir3.position.set(0, -2, 4)
-    scene.add(dir3)
-
-    // ─── Charger les bouteilles ───────────────────────────────────────────────
-    const loader     = new THREE.GLTFLoader()
-    const models     = []
-    const hovered    = {}
-    const spacing    = 1.6
-    const startX     = -((bottles.length - 1) * spacing) / 2
-
+ 
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5)
+    sun.position.set(4, 8, 4)
+    scene.add(sun)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.5)
+    fill.position.set(-4, 2, -2)
+    scene.add(fill)
+ 
+    const loader  = new GLTFLoader()
+    const models  = []
+    const hovered = {}
+    const spacing = 1.6
+    const startX  = -((bottles.length - 1) * spacing) / 2
     let loaded = 0
+ 
     bottles.forEach((bottle, i) => {
       loader.load(bottle.url, (gltf) => {
         const model = gltf.scene
-
-        // Centrer le modèle sur sa base
         const box    = new THREE.Box3().setFromObject(model)
-        const center = box.getCenter(new THREE.Vector3())
         const size   = box.getSize(new THREE.Vector3())
+        const center = box.getCenter(new THREE.Vector3())
         model.position.sub(center)
         model.position.y += size.y / 2
-
-        // Normaliser la taille
-        const maxDim  = Math.max(size.x, size.y, size.z)
-        const normScale = (1.8 / maxDim) * bottleScale
-        model.scale.setScalar(normScale)
-
-        // Positionner côte à côte
-        const x = startX + i * spacing
+        const maxDim = Math.max(size.x, size.y, size.z)
+        model.scale.setScalar((1.8 / maxDim) * bottleScale)
         const group = new THREE.Group()
         group.add(model)
-        group.position.set(x, 0, 0)
+        group.position.set(startX + i * spacing, 0, 0)
         scene.add(group)
-
         hovered[i] = false
-        models.push({
-          group,
-          baseY: 0,
-          tiltDir: i % 2 === 0 ? 1 : -1,
-          link: bottle.link,
-          index: i,
-        })
-
+        models.push({ group, baseY: 0, tiltDir: i % 2 === 0 ? 1 : -1, link: bottle.link, index: i })
         loaded++
-        if (loaded === bottles.length) {
-          document.getElementById("loading").style.display = "none"
-        }
+        if (loaded === bottles.length) document.getElementById('loading').style.display = 'none'
       }, undefined, (err) => {
-        console.error("Erreur chargement", bottle.url, err)
+        console.error('Erreur GLB :', bottle.url, err)
         loaded++
-        if (loaded === bottles.length) {
-          document.getElementById("loading").style.display = "none"
-        }
+        if (loaded === bottles.length) document.getElementById('loading').style.display = 'none'
       })
     })
-
-    // ─── Raycaster pour hover & click ─────────────────────────────────────────
+ 
     const raycaster = new THREE.Raycaster()
-    const mouse     = new THREE.Vector2()
-
-    function getHoveredModel(event) {
+    const mouse = new THREE.Vector2()
+ 
+    function getHit(event) {
       const rect = renderer.domElement.getBoundingClientRect()
-      mouse.x =  ((event.clientX - rect.left)  / rect.width)  * 2 - 1
-      mouse.y = -((event.clientY - rect.top)   / rect.height) * 2 + 1
+      mouse.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1
+      mouse.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1
       raycaster.setFromCamera(mouse, camera)
-      const objs = models.map(m => m.group)
-      const hits = raycaster.intersectObjects(objs, true)
+      const hits = raycaster.intersectObjects(models.map(m => m.group), true)
       if (!hits.length) return null
       let obj = hits[0].object
       while (obj.parent && !models.find(m => m.group === obj)) obj = obj.parent
       return models.find(m => m.group === obj) || null
     }
-
-    window.addEventListener("mousemove", (e) => {
-      models.forEach(m => hovered[m.index] = false)
-      const m = getHoveredModel(e)
-      if (m) {
-        hovered[m.index] = true
-        document.body.style.cursor = "pointer"
-      } else {
-        document.body.style.cursor = "default"
+ 
+    window.addEventListener('mousemove', (e) => {
+      models.forEach(m => (hovered[m.index] = false))
+      const hit = getHit(e)
+      if (hit) { hovered[hit.index] = true; document.body.style.cursor = 'pointer' }
+      else document.body.style.cursor = 'default'
+    })
+ 
+    window.addEventListener('click', (e) => {
+      const hit = getHit(e)
+      if (hit?.link) {
+        window.parent.postMessage({ type: 'navigate', link: hit.link }, '*')
+        window.top.location.href = hit.link
       }
     })
-
-    window.addEventListener("click", (e) => {
-      const m = getHoveredModel(e)
-      if (m && m.link) {
-        // Envoie le lien à Framer via postMessage
-        window.parent.postMessage({ type: "navigate", link: m.link }, "*")
-        // Fallback direct
-        window.top.location.href = m.link
-      }
-    })
-
-    // ─── Resize ──────────────────────────────────────────────────────────────
-    window.addEventListener("resize", () => {
+ 
+    window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
     })
-
-    // ─── Animation loop ───────────────────────────────────────────────────────
+ 
     function animate() {
       requestAnimationFrame(animate)
       models.forEach((m) => {
-        const isHovered = hovered[m.index]
-        const targetY    = isHovered ? m.baseY + 0.22 : m.baseY
-        const targetRotZ = isHovered ? m.tiltDir * 0.07 : 0
-        m.group.position.y += (targetY    - m.group.position.y)    * 0.09
-        m.group.rotation.z += (targetRotZ - m.group.rotation.z) * 0.09
+        const isHov    = hovered[m.index]
+        const targetY  = isHov ? m.baseY + 0.22 : m.baseY
+        const targetRZ = isHov ? m.tiltDir * 0.07 : 0
+        m.group.position.y += (targetY  - m.group.position.y)  * 0.09
+        m.group.rotation.z += (targetRZ - m.group.rotation.z) * 0.09
       })
       renderer.render(scene, camera)
     }
