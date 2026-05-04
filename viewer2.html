@@ -25,50 +25,93 @@
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 PARAMÈTRES — viennent du composant Framer via l'URL
+    // Exemple: viewer2.html?cam=7&spacing=1.4&roty=270&url1=...&link1=/product
+    // ─────────────────────────────────────────────────────────────────────
     const msg     = document.getElementById('msg')
     const p       = new URLSearchParams(window.location.search)
-    const cam     = parseFloat(p.get('cam') || '7')
-    const spacing = parseFloat(p.get('spacing') || '1.4')
-    const rotY    = parseFloat(p.get('roty') || '270')
+    const cam     = parseFloat(p.get('cam')     || '7')    // Distance caméra
+    const spacing = parseFloat(p.get('spacing') || '1.4')  // Espace entre bouteilles
+    const rotY    = parseFloat(p.get('roty')    || '270')  // Rotation Y des bouteilles
 
-    const seen = new Set()
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 BOUTEILLES — lecture des paramètres url1..url5 + link1..link5
+    // Chaque bouteille a : une URL de GLB, un lien de navigation, un scale
+    // ─────────────────────────────────────────────────────────────────────
+    const seen    = new Set()  // Évite les doublons si même URL
     const bottles = []
     for (let i = 1; i <= 5; i++) {
       const url = p.get('url' + i)
       if (url && !seen.has(url)) {
         seen.add(url)
-        bottles.push({ url, link: p.get('link' + i) || '/', scale: parseFloat(p.get('scale' + i) || '1') })
+        bottles.push({
+          url,
+          link:  p.get('link' + i) || '/',   // ← 🔗 LIEN DE NAVIGATION (ex: /product)
+          scale: parseFloat(p.get('scale' + i) || '1')
+        })
       }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 RENDERER — configure le moteur de rendu Three.js
+    // alpha: true = fond transparent (on voit l'image Framer derrière)
+    // ─────────────────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
+    renderer.outputColorSpace  = THREE.SRGBColorSpace       // Couleurs réalistes
+    renderer.toneMapping       = THREE.ACESFilmicToneMapping // Rendu cinématique
+    renderer.toneMappingExposure = 1.2                       // Luminosité générale
     document.body.appendChild(renderer.domElement)
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 SCÈNE & CAMÉRA
+    // ─────────────────────────────────────────────────────────────────────
     const scene  = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000)
-    camera.position.set(0, 1, cam)
-    camera.lookAt(0, 1, 0)
+    const camera = new THREE.PerspectiveCamera(
+      50,                                          // Angle de vue (FOV)
+      window.innerWidth / window.innerHeight,      // Ratio largeur/hauteur
+      0.01,                                        // Plan proche
+      1000                                         // Plan loin
+    )
+    camera.position.set(0, 1, cam)  // Position caméra (x, hauteur, distance)
+    camera.lookAt(0, 1, 0)          // Point que regarde la caméra
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
-    const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
-    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 LUMIÈRES — éclairage des bouteilles
+    // ─────────────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9))          // Lumière globale douce
 
+    const l1 = new THREE.DirectionalLight(0xffffff, 1.5)      // Soleil principal
+    l1.position.set(5, 8, 5)                                   // Haut droite devant
+    scene.add(l1)
+
+    const l2 = new THREE.DirectionalLight(0xffffff, 0.5)      // Fill light gauche
+    l2.position.set(-5, 3, -3)                                 // Bas gauche derrière
+    scene.add(l2)
+
+    const l3 = new THREE.DirectionalLight(0xffffff, 0.3)      // Lumière de bas
+    l3.position.set(0, -2, 5)                                  // Bas devant
+    scene.add(l3)
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 CHARGEMENT DES GLB
+    // Les textures/matériaux sont dans les fichiers GLB — chargés auto
+    // ─────────────────────────────────────────────────────────────────────
     const loader  = new GLTFLoader()
-    const models  = []
-    const hovered = {}
-    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
-    let done = 0
+    const models  = []     // Stocke les modèles chargés
+    const hovered = {}     // Stocke l'état hover de chaque bouteille
+    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0  // Centre les bouteilles
+    let done = 0           // Compteur de chargement
 
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
-      obj.rotation.y = THREE.MathUtils.degToRad(rotY)
 
+      // Orienter la bouteille face à la caméra
+      obj.rotation.y = THREE.MathUtils.degToRad(rotY)  // ← 🔄 ROTATION (270° = face caméra)
+
+      // Calculer la taille réelle du modèle
       const tmp = new THREE.Group()
       tmp.add(obj)
       scene.add(tmp)
@@ -78,37 +121,63 @@
       const maxDim = Math.max(size1.x, size1.y, size1.z)
       scene.remove(tmp)
 
-      const s = (1.8 * bottleScale) / maxDim
+      // Normaliser la taille (toutes les bouteilles font ~1.8 unités de haut)
+      const s = (1.8 * bottleScale) / maxDim  // ← 📏 TAILLE (bottleScale vient de Framer)
       tmp.scale.setScalar(s)
+
+      // Centrer le modèle et poser sa base à Y=0
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
       const box2   = new THREE.Box3().setFromObject(tmp)
       const center = box2.getCenter(new THREE.Vector3())
-      tmp.position.x -= center.x
-      tmp.position.z -= center.z
-      tmp.position.y -= box2.min.y
+      tmp.position.x -= center.x   // Centrer horizontalement
+      tmp.position.z -= center.z   // Centrer en profondeur
+      tmp.position.y -= box2.min.y // Poser la base au sol
       scene.remove(tmp)
 
+      // Créer le groupe final et positionner côte à côte
       const group = new THREE.Group()
       group.add(tmp)
-      group.position.set(startX + i * spacing, -0.5, 0)
+      group.position.set(startX + i * spacing, -0.5, 0)  // ← ↕️ -0.5 = position verticale
       scene.add(group)
 
+      // Enregistrer le modèle pour le hover et le clic
       hovered[i] = false
-      models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
+      models.push({
+        group,
+        baseY:   -0.5,                      // Position Y de repos
+        tiltDir: i % 2 === 0 ? 1 : -1,     // Inclinaison alternée gauche/droite
+        link:    bottles[i].link,            // ← 🔗 LIEN de cette bouteille
+        idx:     i
+      })
+
       done++
-      if (done === bottles.length) msg.style.display = 'none'
+      if (done === bottles.length) msg.style.display = 'none'  // Cache le message de chargement
     }
 
+    // Charger chaque bouteille
     bottles.forEach((bottle, i) => {
-      loader.load(bottle.url, (gltf) => placeModel(gltf, i, bottle.scale),
-        undefined, (err) => { console.error(err); done++ })
+      loader.load(
+        bottle.url,                                              // ← URL du fichier GLB
+        (gltf) => placeModel(gltf, i, bottle.scale),           // Succès
+        undefined,
+        (err) => { console.error('Erreur GLB:', err); done++ } // Erreur
+      )
     })
 
-    const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 DÉTECTION DES CLICS — Raycaster
+    // Envoie un rayon depuis la caméra vers la position de la souris
+    // ─────────────────────────────────────────────────────────────────────
+    const ray   = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
     function getHit(e) {
       const r = renderer.domElement.getBoundingClientRect()
-      mouse.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1)
+      mouse.set(
+        ((e.clientX - r.left) / r.width)  * 2 - 1,   // Position X normalisée
+        -((e.clientY - r.top)  / r.height) * 2 + 1    // Position Y normalisée (inversée)
+      )
       ray.setFromCamera(mouse, camera)
       const hits = ray.intersectObjects(models.map(m => m.group), true)
       if (!hits.length) return null
@@ -117,44 +186,54 @@
       return models.find(m => m.group === o) || null
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 HOVER — effet au survol de la souris
+    // ─────────────────────────────────────────────────────────────────────
     window.addEventListener('mousemove', e => {
       models.forEach(m => hovered[m.idx] = false)
       const h = getHit(e)
-      if (h) { hovered[h.idx] = true; renderer.domElement.style.cursor = 'pointer' }
-      else renderer.domElement.style.cursor = 'default'
-    })
-
-    window.addEventListener('click', e => {
-      const h = getHit(e)
-      if (h?.link) {
-        // Navigation directe depuis l'iframe
-        const link = h.link
-        try {
-          // Essai 1 : naviguer la fenêtre parente
-          if (window.parent && window.parent !== window) {
-            window.parent.location.href = link
-          }
-        } catch(err) {
-          // Essai 2 : naviguer la fenêtre top
-          try { window.top.location.href = link } catch(e2) {}
-        }
-        // Essai 3 : postMessage en parallèle
-        window.parent.postMessage({ type: 'navigate', link }, '*')
-        window.top.postMessage({ type: 'navigate', link }, '*')
+      if (h) {
+        hovered[h.idx] = true
+        renderer.domElement.style.cursor = 'pointer'  // Curseur main
+      } else {
+        renderer.domElement.style.cursor = 'default'
       }
     })
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 CLIC — navigation vers la page produit
+    // Envoie un message au composant Framer parent qui gère la navigation
+    // ─────────────────────────────────────────────────────────────────────
+    window.addEventListener('click', e => {
+      const h = getHit(e)
+      if (h?.link) {
+        // Envoie le lien au composant Framer (useEffect postMessage listener)
+        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+      }
+    })
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 RESIZE — adapter au redimensionnement de la fenêtre
+    // ─────────────────────────────────────────────────────────────────────
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
     })
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 ANIMATION LOOP — tourne à chaque frame
+    // Gère le hover (montée) et l'inclinaison des bouteilles
+    // ─────────────────────────────────────────────────────────────────────
     function animate() {
       requestAnimationFrame(animate)
       models.forEach(m => {
         const h = hovered[m.idx]
+
+        // ↑ Monte de 0.22 unités au hover, redescend sinon (lerp = mouvement fluide)
         m.group.position.y += ((h ? m.baseY + 0.22 : m.baseY) - m.group.position.y) * 0.09
+
+        // ↔ Incline légèrement la bouteille au hover
         m.group.rotation.z += ((h ? m.tiltDir * 0.07 : 0) - m.group.rotation.z) * 0.09
       })
       renderer.render(scene, camera)
