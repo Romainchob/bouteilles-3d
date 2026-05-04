@@ -100,16 +100,17 @@
                           (name.includes('bottle') && !name.includes('label') && !name.includes('cork') && !name.includes('cap'))
 
           if (isGlass) {
-            const color = mat.color ? mat.color.clone() : new THREE.Color(0.02, 0.08, 0.02)
             const newMat = new THREE.MeshPhysicalMaterial({
-              color,
-              transmission:      0.95,   // Quasi totalement transparent
-              roughness:         0.03,   // Ultra lisse = reflets nets
+              color:             new THREE.Color(0, 0, 0),  // Noir pur = transmission contrôle la couleur
+              transmission:      1.0,    // 100% transparent
+              roughness:         0.02,   // Ultra lisse = reflets et réfraction nets
               metalness:         0.0,
-              thickness:         2.0,    // Épaisseur simulée du verre
-              ior:               1.52,   // Indice de réfraction du verre réel
+              thickness:         3.5,    // Épaisseur du verre (plus = plus coloré)
+              ior:               1.6,    // Réfraction forte (verre épais)
+              attenuationColor:  new THREE.Color(0.1, 0.35, 0.08),  // Vert bouteille vin
+              attenuationDistance: 0.5,  // Distance d'atténuation (couleur dans le verre)
               envMap:            envTexture,
-              envMapIntensity:   2.5,
+              envMapIntensity:   3.0,
               side:              THREE.FrontSide,
             })
             if (Array.isArray(child.material)) child.material[idx] = newMat
