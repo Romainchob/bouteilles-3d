@@ -127,8 +127,20 @@
     window.addEventListener('click', e => {
       const h = getHit(e)
       if (h?.link) {
-        // Envoie le lien au composant Framer parent
-        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+        // Navigation directe depuis l'iframe
+        const link = h.link
+        try {
+          // Essai 1 : naviguer la fenêtre parente
+          if (window.parent && window.parent !== window) {
+            window.parent.location.href = link
+          }
+        } catch(err) {
+          // Essai 2 : naviguer la fenêtre top
+          try { window.top.location.href = link } catch(e2) {}
+        }
+        // Essai 3 : postMessage en parallèle
+        window.parent.postMessage({ type: 'navigate', link }, '*')
+        window.top.postMessage({ type: 'navigate', link }, '*')
       }
     })
 
