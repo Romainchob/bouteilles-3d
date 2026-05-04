@@ -59,6 +59,71 @@
     const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
     const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
 
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 ENV MAP — génère une carte d'environnement pour les reflets du verre
+    // Sans env map = verre noir. Avec env map = reflets réalistes
+    // ─────────────────────────────────────────────────────────────────────
+    const pmrem  = new THREE.PMREMGenerator(renderer)
+    const envScene = new THREE.Scene()
+
+    // Lumières colorées pour simuler un environnement studio
+    ;[
+      { color: 0xfff5e0, intensity: 4,   pos: [5,  8,  5]  },  // Soleil chaud
+      { color: 0xc8e8ff, intensity: 3,   pos: [-5, 5, -5]  },  // Ciel bleu
+      { color: 0xffffff, intensity: 2,   pos: [0, -4,  0]  },  // Rebond sol
+      { color: 0xffe0c0, intensity: 1.5, pos: [0,  6, -8]  },  // Contre-jour
+    ].forEach(({ color, intensity, pos }) => {
+      const l = new THREE.PointLight(color, intensity, 30)
+      l.position.set(...pos)
+      envScene.add(l)
+    })
+    envScene.add(new THREE.AmbientLight(0xffffff, 1))
+
+    const envTexture = pmrem.fromScene(envScene).texture
+    pmrem.dispose()
+    scene.environment = envTexture  // Applique l'env map à toute la scène
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 📌 FIX VERRE — applique MeshPhysicalMaterial sur les matériaux verre
+    // ─────────────────────────────────────────────────────────────────────
+    function fixGlass(obj) {
+      obj.traverse((child) => {
+        if (!child.isMesh) return
+        const mats = Array.isArray(child.material) ? child.material : [child.material]
+        mats.forEach((mat, idx) => {
+          if (!mat) return
+          const name = (mat.name || '').toLowerCase()
+          const isGlass = mat.transmission > 0 ||
+                          name.includes('glass') ||
+                          name.includes('verre') ||
+                          name.includes('wine') ||
+                          (name.includes('bottle') && !name.includes('label') && !name.includes('cork') && !name.includes('cap'))
+
+          if (isGlass) {
+            const color = mat.color ? mat.color.clone() : new THREE.Color(0.02, 0.08, 0.02)
+            const newMat = new THREE.MeshPhysicalMaterial({
+              color,
+              transmission:      0.95,   // Quasi totalement transparent
+              roughness:         0.03,   // Ultra lisse = reflets nets
+              metalness:         0.0,
+              thickness:         2.0,    // Épaisseur simulée du verre
+              ior:               1.52,   // Indice de réfraction du verre réel
+              envMap:            envTexture,
+              envMapIntensity:   2.5,
+              side:              THREE.FrontSide,
+            })
+            if (Array.isArray(child.material)) child.material[idx] = newMat
+            else child.material = newMat
+          } else {
+            // Matériaux opaques — booster les reflets
+            mat.envMap = envTexture
+            mat.envMapIntensity = 1.0
+            mat.needsUpdate = true
+          }
+        })
+      })
+    }
+
     // ── Easings ──────────────────────────────────────────────────────────
     function easeOutElastic(t) {
       if (t === 0 || t === 1) return t
@@ -68,16 +133,20 @@
       return 1 - Math.pow(1 - t, 3)
     }
 
+    // Initialiser animState pour tous les indices possibles
+    const animState = {}
+    for (let i = 0; i < 5; i++) animState[i] = { progress: 0 }
+
     const loader  = new GLTFLoader()
     const models  = []
     const hovered = {}
-    const animState = {}  // État d'animation par bouteille
     const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
     let done = 0
 
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
+      fixGlass(obj)  // 🔧 Applique le matériau verre
 
       const tmp = new THREE.Group()
       tmp.add(obj)
@@ -105,9 +174,6 @@
       scene.add(group)
 
       hovered[i] = false
-
-      // Initialiser l'état d'animation
-      animState[i] = { progress: 0 }
 
       models.push({
         group,
