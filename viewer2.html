@@ -17,13 +17,15 @@
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "@pmndrs/vanilla": "https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@0.0.16/dist/index.js"
     }
   }
   </script>
   <script type="module">
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+    import { MeshTransmissionMaterial } from '@pmndrs/vanilla'
 
     const msg     = document.getElementById('msg')
     const p       = new URLSearchParams(window.location.search)
@@ -41,6 +43,7 @@
       }
     }
 
+    // ── Renderer ──────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -49,43 +52,70 @@
     renderer.toneMappingExposure = 1.2
     document.body.appendChild(renderer.domElement)
 
-    const scene  = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000)
-    camera.position.set(0, 1, cam)
-    camera.lookAt(0, 1, 0)
+    // ── FBO — render target pour MeshTransmissionMaterial ─────────────────
+    // Le matériau a besoin de voir la scène derrière lui
+    const fbo = new THREE.WebGLRenderTarget(
+      window.innerWidth,
+      window.innerHeight,
+      { samples: 4 }
+    )
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const l1 = new THREE.DirectionalLight(0xffffff, 1.5); l1.position.set(5, 8, 5); scene.add(l1)
-    const l2 = new THREE.DirectionalLight(0xffffff, 0.5); l2.position.set(-5, 3, -3); scene.add(l2)
-    const l3 = new THREE.DirectionalLight(0xffffff, 0.3); l3.position.set(0, -2, 5); scene.add(l3)
-
-    // ─────────────────────────────────────────────────────────────────────
-    // 📌 ENV MAP — génère une carte d'environnement pour les reflets du verre
-    // Sans env map = verre noir. Avec env map = reflets réalistes
-    // ─────────────────────────────────────────────────────────────────────
-    const pmrem  = new THREE.PMREMGenerator(renderer)
+    // ── Env Map ────────────────────────────────────────────────────────────
+    const pmrem = new THREE.PMREMGenerator(renderer)
     const envScene = new THREE.Scene()
-
-    // Lumières colorées pour simuler un environnement studio
     ;[
-      { color: 0xfff5e0, intensity: 4,   pos: [5,  8,  5]  },  // Soleil chaud
-      { color: 0xc8e8ff, intensity: 3,   pos: [-5, 5, -5]  },  // Ciel bleu
-      { color: 0xffffff, intensity: 2,   pos: [0, -4,  0]  },  // Rebond sol
-      { color: 0xffe0c0, intensity: 1.5, pos: [0,  6, -8]  },  // Contre-jour
+      { color: 0xfff5e0, intensity: 4,   pos: [5,  8,  5]  },
+      { color: 0xc8e8ff, intensity: 3,   pos: [-5, 5, -5]  },
+      { color: 0xffffff, intensity: 2,   pos: [0, -4,  0]  },
+      { color: 0xffe0c0, intensity: 1.5, pos: [0,  6, -8]  },
     ].forEach(({ color, intensity, pos }) => {
       const l = new THREE.PointLight(color, intensity, 30)
       l.position.set(...pos)
       envScene.add(l)
     })
     envScene.add(new THREE.AmbientLight(0xffffff, 1))
-
     const envTexture = pmrem.fromScene(envScene).texture
     pmrem.dispose()
-    scene.environment = envTexture  // Applique l'env map à toute la scène
 
-    // ─────────────────────────────────────────────────────────────────────
-    // 📌 FIX VERRE — applique MeshPhysicalMaterial sur les matériaux verre
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Scène & Caméra ─────────────────────────────────────────────────────
+    const scene  = new THREE.Scene()
+    scene.environment = envTexture
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000)
+    camera.position.set(0, 1, cam)
+    camera.lookAt(0, 1, 0)
+
+    // ── Lumières ───────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    const l1 = new THREE.DirectionalLight(0xfff5e0, 2.0); l1.position.set(3, 6, 4); scene.add(l1)
+    const l2 = new THREE.DirectionalLight(0xc8e8ff, 0.8); l2.position.set(-4, 3, -2); scene.add(l2)
+    const l3 = new THREE.DirectionalLight(0xffffff, 0.6); l3.position.set(0, 4, -5); scene.add(l3)
+
+    // ── MeshTransmissionMaterial — verre réaliste avec réfraction ──────────
+    const glassMats = [] // Stocker les matériaux pour update du buffer dans animate()
+
+    function makeGlassMaterial(color) {
+      const mat = new MeshTransmissionMaterial({
+        _transmission:      1,       // Transmission totale
+        thickness:          3.0,     // Épaisseur du verre (réfraction)
+        roughness:          0.02,    // Quasi lisse
+        chromaticAberration: 0.06,  // Légère aberration chromatique (arc-en-ciel)
+        anisotropicBlur:    0.1,    // Flou anisotrope
+        distortion:         0.1,    // Légère distortion
+        distortionScale:    0.3,    // Échelle de la distortion
+        temporalDistortion: 0.02,   // Animation légère
+        ior:                1.6,    // Indice de réfraction
+        attenuationColor:   color,  // Couleur du verre
+        attenuationDistance: 0.4,   // Distance d'atténuation
+        envMap:             envTexture,
+        envMapIntensity:    3.0,
+        color:              new THREE.Color(0, 0, 0),
+      })
+      mat.buffer = fbo.texture  // Crucial pour voir la scène derrière
+      glassMats.push(mat)
+      return mat
+    }
+
     function fixGlass(obj) {
       obj.traverse((child) => {
         if (!child.isMesh) return
@@ -100,23 +130,17 @@
                           (name.includes('bottle') && !name.includes('label') && !name.includes('cork') && !name.includes('cap'))
 
           if (isGlass) {
-            const newMat = new THREE.MeshPhysicalMaterial({
-              color:             new THREE.Color(0, 0, 0),  // Noir pur = transmission contrôle la couleur
-              transmission:      1.0,    // 100% transparent
-              roughness:         0.02,   // Ultra lisse = reflets et réfraction nets
-              metalness:         0.0,
-              thickness:         3.5,    // Épaisseur du verre (plus = plus coloré)
-              ior:               1.6,    // Réfraction forte (verre épais)
-              attenuationColor:  new THREE.Color(0.1, 0.35, 0.08),  // Vert bouteille vin
-              attenuationDistance: 0.5,  // Distance d'atténuation (couleur dans le verre)
-              envMap:            envTexture,
-              envMapIntensity:   3.0,
-              side:              THREE.FrontSide,
-            })
+            // Couleur d'atténuation selon la teinte originale du matériau
+            const origColor = mat.color || new THREE.Color(0.1, 0.3, 0.1)
+            const attColor = new THREE.Color(
+              Math.max(origColor.r, 0.04),
+              Math.max(origColor.g, 0.15),
+              Math.max(origColor.b, 0.04)
+            )
+            const newMat = makeGlassMaterial(attColor)
             if (Array.isArray(child.material)) child.material[idx] = newMat
             else child.material = newMat
           } else {
-            // Matériaux opaques — booster les reflets
             mat.envMap = envTexture
             mat.envMapIntensity = 1.0
             mat.needsUpdate = true
@@ -125,7 +149,7 @@
       })
     }
 
-    // ── Easings ──────────────────────────────────────────────────────────
+    // ── Easings ────────────────────────────────────────────────────────────
     function easeOutElastic(t) {
       if (t === 0 || t === 1) return t
       return Math.pow(2, -10 * t) * Math.sin((t - 0.1) * (2 * Math.PI) / 0.4) + 1
@@ -134,20 +158,19 @@
       return 1 - Math.pow(1 - t, 3)
     }
 
-    // Initialiser animState pour tous les indices possibles
-    const animState = {}
-    for (let i = 0; i < 5; i++) animState[i] = { progress: 0 }
-
+    // ── Chargement GLB ─────────────────────────────────────────────────────
     const loader  = new GLTFLoader()
     const models  = []
     const hovered = {}
-    const startX  = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
+    const animState = {}
+    for (let i = 0; i < 5; i++) animState[i] = { progress: 0 }
+    const startX = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
     let done = 0
 
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
-      fixGlass(obj)  // 🔧 Applique le matériau verre
+      fixGlass(obj)
 
       const tmp = new THREE.Group()
       tmp.add(obj)
@@ -175,15 +198,7 @@
       scene.add(group)
 
       hovered[i] = false
-
-      models.push({
-        group,
-        baseY:   -0.5,
-        tiltDir: i % 2 === 0 ? 1 : -1,
-        link:    bottles[i].link,
-        idx:     i
-      })
-
+      models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
       done++
       if (done === bottles.length) msg.style.display = 'none'
     }
@@ -193,6 +208,7 @@
         undefined, (err) => { console.error(err); done++ })
     })
 
+    // ── Raycaster ──────────────────────────────────────────────────────────
     const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
     function getHit(e) {
       const r = renderer.domElement.getBoundingClientRect()
@@ -221,38 +237,57 @@
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
+      fbo.setSize(window.innerWidth, window.innerHeight)
     })
+
+    // ── Matériau de masquage pour le FBO ───────────────────────────────────
+    // Nécessaire : on rend la scène sans le verre dans le FBO
+    // puis on rend avec le verre par dessus
+    const discardMat = new THREE.MeshBasicMaterial({ visible: false })
+    const glassMeshes = new Set()
+
+    // ── Animation ──────────────────────────────────────────────────────────
+    const clock = new THREE.Clock()
 
     function animate() {
       requestAnimationFrame(animate)
+      const time = clock.getElapsedTime()
 
+      // Mettre à jour le temps dans les matériaux verre (pour temporalDistortion)
+      glassMats.forEach(mat => { mat.time = time })
+
+      // Rendu FBO : scène sans les verres (pour la réfraction)
+      const glassChildren = []
+      scene.traverse((child) => {
+        if (child.isMesh && glassMats.includes(child.material)) {
+          glassChildren.push({ mesh: child, mat: child.material })
+          child.material = discardMat
+        }
+      })
+
+      renderer.setRenderTarget(fbo)
+      renderer.render(scene, camera)
+      renderer.setRenderTarget(null)
+
+      // Restaurer les matériaux verre
+      glassChildren.forEach(({ mesh, mat }) => { mesh.material = mat })
+
+      // Animations hover
       models.forEach(m => {
         const h = hovered[m.idx]
         const a = animState[m.idx]
         if (!a) return
 
-        // Progression 0→1 au hover, 1→0 au déhover
         if (h) a.progress = Math.min(1, a.progress + 0.06)
         else   a.progress = Math.max(0, a.progress - 0.045)
 
-        const ep = easeOutElastic(a.progress)  // Rebond à l'entrée
-        const cp = easeOutCubic(a.progress)    // Doux à la sortie
+        const ep = easeOutElastic(a.progress)
+        const cp = easeOutCubic(a.progress)
 
-        // Montée avec rebond élastique
-        const targetY = m.baseY + 0.28 * ep
-        m.group.position.y += (targetY - m.group.position.y) * 0.12
-
-        // Rotation Y — tourne légèrement vers la caméra
-        const targetRotY = m.tiltDir * 0.2 * cp
-        m.group.rotation.y += (targetRotY - m.group.rotation.y) * 0.08
-
-        // Inclinaison Z légère
-        const targetRotZ = m.tiltDir * 0.06 * cp
-        m.group.rotation.z += (targetRotZ - m.group.rotation.z) * 0.08
-
-        // Scale — grandit légèrement avec rebond
-        const targetScale = 1 + 0.03 * ep
-        m.group.scale.setScalar(targetScale)
+        m.group.position.y += ((m.baseY + 0.28 * ep) - m.group.position.y) * 0.12
+        m.group.rotation.y += (m.tiltDir * 0.2 * cp - m.group.rotation.y) * 0.08
+        m.group.rotation.z += (m.tiltDir * 0.06 * cp - m.group.rotation.z) * 0.08
+        m.group.scale.setScalar(1 + 0.03 * ep)
       })
 
       renderer.render(scene, camera)
