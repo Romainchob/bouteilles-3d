@@ -1,14 +1,39 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bouteilles 3D</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-    canvas { display: block; }
-    #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: sans-serif; font-size: 13px; color: #555; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #msg {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: sans-serif;
+      font-size: 13px;
+      color: #555;
+    }
+
     #tooltip {
       position: fixed;
       pointer-events: none;
@@ -20,6 +45,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="msg">Chargement...</div>
   <div id="tooltip"></div>
@@ -34,19 +60,21 @@
   <script type="module">
     import * as THREE from 'three'
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
+    import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/dist/lil-gui.esm.js'
 
-    const msg     = document.getElementById('msg')
-    const p       = new URLSearchParams(window.location.search)
-    const cam     = parseFloat(p.get('cam')     || '7')
+    const msg = document.getElementById('msg')
+    const p = new URLSearchParams(window.location.search)
+    const cam = parseFloat(p.get('cam') || '7')
     const spacing = parseFloat(p.get('spacing') || '1.4')
-    const rotY    = parseFloat(p.get('roty')    || '270')
+    const rotY = parseFloat(p.get('roty') || '270')
 
     // ── Paramètres tooltip ───────────────────────────────────────────────
-    const tooltipBg      = p.get('tooltipBg')      || 'rgba(0,0,0,0.75)'
-    const tooltipColor   = p.get('tooltipColor')   || '#ffffff'
-    const tooltipFont    = p.get('tooltipFont')    || 'sans-serif'
-    const tooltipSize    = p.get('tooltipSize')    || '13px'
-    const tooltipRadius  = p.get('tooltipRadius')  || '6px'
+    const tooltipBg = p.get('tooltipBg') || 'rgba(0,0,0,0.75)'
+    const tooltipColor = p.get('tooltipColor') || '#ffffff'
+    const tooltipFont = p.get('tooltipFont') || 'sans-serif'
+    const tooltipSize = p.get('tooltipSize') || '13px'
+    const tooltipRadius = p.get('tooltipRadius') || '6px'
     const tooltipPadding = p.get('tooltipPadding') || '6px 12px'
     const labels = {}
     for (let i = 1; i <= 5; i++) {
@@ -55,14 +83,14 @@
 
     // Appliquer le style du tooltip
     const tooltip = document.getElementById('tooltip')
-    tooltip.style.background    = tooltipBg
-    tooltip.style.color         = tooltipColor
-    tooltip.style.fontFamily    = tooltipFont
-    tooltip.style.fontSize      = tooltipSize
-    tooltip.style.borderRadius  = tooltipRadius
-    tooltip.style.padding       = tooltipPadding
-    tooltip.style.whiteSpace    = 'nowrap'
-    tooltip.style.boxShadow     = '0 4px 20px rgba(0,0,0,0.2)'
+    tooltip.style.background = tooltipBg
+    tooltip.style.color = tooltipColor
+    tooltip.style.fontFamily = tooltipFont
+    tooltip.style.fontSize = tooltipSize
+    tooltip.style.borderRadius = tooltipRadius
+    tooltip.style.padding = tooltipPadding
+    tooltip.style.whiteSpace = 'nowrap'
+    tooltip.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)'
     tooltip.style.backdropFilter = 'blur(8px)'
 
     const seen = new Set()
@@ -75,35 +103,122 @@
       }
     }
 
+    // Fallback: If no bottles are specified in the URL query parameters, load the local files by default.
+    if (bottles.length === 0) {
+      console.log("No custom model parameters (?url1=...) found in the URL. Loading default local models.");
+      const defaults = [
+        { url: 'Canette2.glb', label: 'Canette' },
+        { url: 'bierre.glb', label: 'Bière' },
+        { url: 'bottlemiglia.glb', label: 'Miglia' },
+        { url: 'papa.glb', label: 'Papa' },
+        { url: 'rougeglb.glb', label: 'Rouge' }
+      ]
+      defaults.forEach((item, idx) => {
+        bottles.push({ url: item.url, link: '/', scale: 1 })
+        labels[idx + 1] = item.label
+      })
+    }
+
     // ── Renderer ──────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
+    renderer.toneMappingExposure = 1.0
     document.body.appendChild(renderer.domElement)
 
     // ── Env Map pour reflets réalistes ────────────────────────────────────
     const pmrem = new THREE.PMREMGenerator(renderer)
     const envScene = new THREE.Scene()
-    ;[
-      { color: 0xfff5e0, intensity: 4,   pos: [5,  8,  5]  },
-      { color: 0xc8e8ff, intensity: 3,   pos: [-5, 5, -5]  },
-      { color: 0xffffff, intensity: 2,   pos: [0, -4,  0]  },
-      { color: 0xffe0c0, intensity: 1.5, pos: [0,  6, -8]  },
-    ].forEach(({ color, intensity, pos }) => {
-      const l = new THREE.PointLight(color, intensity, 30)
-      l.position.set(...pos)
-      envScene.add(l)
-    })
+      ;[
+        { color: 0xfff5e0, intensity: 4, pos: [5, 8, 5] },
+        { color: 0xc8e8ff, intensity: 3, pos: [-5, 5, -5] },
+        { color: 0xffffff, intensity: 2, pos: [0, -4, 0] },
+        { color: 0xffe0c0, intensity: 1.5, pos: [0, 6, -8] },
+      ].forEach(({ color, intensity, pos }) => {
+        const l = new THREE.PointLight(color, intensity, 30)
+        l.position.set(...pos)
+        envScene.add(l)
+      })
     envScene.add(new THREE.AmbientLight(0xffffff, 1))
-    const envTexture = pmrem.fromScene(envScene).texture
+    let envTexture = pmrem.fromScene(envScene).texture
     pmrem.dispose()
 
     // ── Scène & Caméra ────────────────────────────────────────────────────
     const scene = new THREE.Scene()
     scene.environment = envTexture
+
+    // Dynamically update materials across all loaded bottles once HDR is ready
+    function updateSceneEnv(newEnv) {
+      envTexture = newEnv
+      scene.environment = envTexture
+      models.forEach(m => {
+        m.group.traverse(child => {
+          if (!child.isMesh) return
+          const mats = Array.isArray(child.material) ? child.material : [child.material]
+          mats.forEach(mat => {
+            if (!mat) return
+            mat.envMap = envTexture
+            mat.needsUpdate = true
+          })
+        })
+      })
+    }
+
+    // Load bambanani_sunset_2k.hdr
+    new RGBELoader().load('bambanani_sunset_2k.hdr', (hdrTex) => {
+      hdrTex.mapping = THREE.EquirectangularReflectionMapping
+      updateSceneEnv(hdrTex)
+    }, undefined, (err) => {
+      console.error('Failed to load bambanani_sunset_2k.hdr environment map:', err)
+    })
+
+    // ── lil-gui Configuration & Control Panel ─────────────────────────────
+    const guiParams = {
+      exposure: 1.0,
+      transmission: 1.0,
+      roughness: 0.0,
+      metalness: 0.0,
+      ior: 1.2,
+      thickness: 0.25,
+      dispersion: 1.9,
+      envMapIntensity: 3.1
+    }
+
+    function updateMaterials() {
+      renderer.toneMappingExposure = guiParams.exposure
+      models.forEach(m => {
+        m.group.traverse(child => {
+          if (!child.isMesh) return
+          const mats = Array.isArray(child.material) ? child.material : [child.material]
+          mats.forEach(mat => {
+            if (!mat || !mat.userData.isGlass) return
+            mat.transmission = guiParams.transmission
+            mat.roughness = guiParams.roughness
+            mat.metalness = guiParams.metalness
+            mat.ior = guiParams.ior
+            mat.thickness = guiParams.thickness
+            mat.dispersion = guiParams.dispersion
+            mat.envMapIntensity = guiParams.envMapIntensity
+            mat.needsUpdate = true
+          })
+        })
+      })
+    }
+
+    const gui = new GUI({ title: 'Ajustements Verre' })
+    const fScene = gui.addFolder('Scène')
+    fScene.add(guiParams, 'exposure', 0.1, 3.0, 0.05).name('Exposition (Exposure)').onChange(updateMaterials)
+
+    const fGlass = gui.addFolder('Propriétés Verre')
+    fGlass.add(guiParams, 'transmission', 0.0, 1.0, 0.01).name('Transmission').onChange(updateMaterials)
+    fGlass.add(guiParams, 'roughness', 0.0, 1.0, 0.01).name('Rugosité (Roughness)').onChange(updateMaterials)
+    fGlass.add(guiParams, 'metalness', 0.0, 1.0, 0.01).name('Métallicité').onChange(updateMaterials)
+    fGlass.add(guiParams, 'ior', 1.0, 2.3, 0.01).name('Réfraction (IOR)').onChange(updateMaterials)
+    fGlass.add(guiParams, 'thickness', 0.0, 5.0, 0.05).name('Épaisseur (Thickness)').onChange(updateMaterials)
+    fGlass.add(guiParams, 'dispersion', 0.0, 15.0, 0.1).name('Dispersion').onChange(updateMaterials)
+    fGlass.add(guiParams, 'envMapIntensity', 0.0, 10.0, 0.1).name('Intensité EnvMap').onChange(updateMaterials)
 
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000)
     camera.position.set(0, 1, cam)
@@ -116,40 +231,137 @@
     const l3 = new THREE.DirectionalLight(0xffffff, 0.6); l3.position.set(0, 4, -5); scene.add(l3)
 
     // ── Fix matériaux verre ───────────────────────────────────────────────
-    function fixGlass(obj) {
+    function fixGlass(obj, bottleUrl) {
+      const filename = (bottleUrl || '').toLowerCase()
+      const isCan = filename.includes('canette')
+
       obj.traverse((child) => {
         if (!child.isMesh) return
         const mats = Array.isArray(child.material) ? child.material : [child.material]
         mats.forEach((mat, idx) => {
           if (!mat) return
           const name = (mat.name || '').toLowerCase()
-          const isGlass = mat.transmission > 0 ||
-                          name.includes('glass') ||
-                          name.includes('verre') ||
-                          name.includes('wine') ||
-                          (name.includes('bottle') && !name.includes('label') && !name.includes('cork') && !name.includes('cap'))
+
+          // A mesh is considered glass if it already has transmission, or is explicitly named glass/verre/wine/bottle
+          // AND it's not a metallic can (which should remain highly reflective metal!)
+          const isGlass = !isCan && (
+            mat.transmission > 0 ||
+            name.includes('glass') ||
+            name.includes('glas') || // Spelled with single 's' (matches 'glas dark')
+            name.includes('verre') ||
+            name.includes('wine') ||
+            name.includes('biere') ||
+            name.includes('beer') ||
+            (name.includes('bottle') && !name.includes('label') && !name.includes('cork') && !name.includes('cap')) ||
+            // Generic glass/liquid meshes inside our specific models
+            (filename.includes('bottlemiglia') && name.includes('material.002'))
+          )
+
           if (isGlass) {
+            // Boost very dark glass colors to be visible transmissive colors while maintaining their exact hue/tint
+            const glassColor = mat.color ? mat.color.clone() : new THREE.Color(0xffffff)
+            const maxChannel = Math.max(glassColor.r, glassColor.g, glassColor.b)
+            if (maxChannel > 0 && maxChannel < 0.18) {
+              const boost = 0.18 / maxChannel
+              glassColor.multiplyScalar(boost)
+            }
+
+            // Case 1: The material already has transmissive glass setup (from KHR_materials_transmission)
+            if (mat.isMeshPhysicalMaterial) {
+              mat.userData.isGlass = true
+              mat.color.copy(glassColor)
+              mat.transparent = true
+              mat.opacity = 1.0
+              mat.transmission = guiParams.transmission
+              mat.roughness = guiParams.roughness
+              mat.metalness = guiParams.metalness
+              mat.ior = guiParams.ior
+              mat.thickness = guiParams.thickness
+              mat.dispersion = guiParams.dispersion // Rainbow dispersion effect!
+              mat.envMap = envTexture
+              mat.envMapIntensity = guiParams.envMapIntensity
+              mat.needsUpdate = true
+              return
+            }
+
+            // Case 2: Upgrade standard material to MeshPhysicalMaterial with dispersion
             const newMat = new THREE.MeshPhysicalMaterial({
-              color:              new THREE.Color(0, 0, 0),
-              transmission:       1.0,
-              roughness:          0.02,
-              metalness:          0.0,
-              thickness:          3.0,
-              ior:                1.6,
-              attenuationColor:   new THREE.Color(0.1, 0.35, 0.08),
-              attenuationDistance: 0.5,
-              envMap:             envTexture,
-              envMapIntensity:    3.0,
-              side:               THREE.FrontSide,
+              color: glassColor,
+              map: mat.map || null,
+              normalMap: mat.normalMap || null,
+              roughnessMap: mat.roughnessMap || null,
+              metalnessMap: mat.metalnessMap || null,
+              aoMap: mat.aoMap || null,
+              roughness: guiParams.roughness,
+              metalness: guiParams.metalness,
+              ior: guiParams.ior,
+              transmission: guiParams.transmission,
+              thickness: guiParams.thickness,
+              dispersion: guiParams.dispersion, // Enable rainbow dispersion!
+              envMap: envTexture,
+              envMapIntensity: guiParams.envMapIntensity,
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 1.0
             })
+            newMat.userData.isGlass = true
+
             if (Array.isArray(child.material)) child.material[idx] = newMat
             else child.material = newMat
           } else {
+            // For non-glass materials (labels, caps, metal cans):
+            // Keep their original authored textures/metallic parameters, but apply the environment map for realistic reflections!
             mat.envMap = envTexture
-            mat.envMapIntensity = 1.0
+            mat.envMapIntensity = isCan ? 2.5 : 3.5
             mat.needsUpdate = true
           }
         })
+      })
+    }
+
+    const bgParam = p.get('bg')
+    if (bgParam) {
+      const isHexHex = /^[0-9A-Fa-f]{3,6}$/.test(bgParam)
+      const bgStyle = isHexHex ? '#' + bgParam : bgParam
+      document.body.style.background = bgStyle
+      if (bgStyle !== 'transparent') {
+        scene.background = new THREE.Color(bgStyle)
+      }
+    } else {
+      // Set background color fallback on the body
+      document.body.style.background = '#222'
+
+      // Load Fond.png inside the Three.js scene so that it can be refracted by the transmissive glass!
+      const texLoader = new THREE.TextureLoader()
+      texLoader.load('Fond.png', (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace
+        scene.background = texture
+
+        // Keep background aspect ratio intact, behaving like CSS background-size: cover
+        function adjustBackground() {
+          if (!texture.image) return
+          const imageAspect = texture.image.width / texture.image.height
+          const screenAspect = window.innerWidth / window.innerHeight
+
+          texture.wrapS = THREE.ClampToEdgeWrapping
+          texture.wrapT = THREE.ClampToEdgeWrapping
+
+          if (screenAspect > imageAspect) {
+            texture.repeat.set(1, imageAspect / screenAspect)
+            texture.offset.set(0, (1 - imageAspect / screenAspect) / 2)
+          } else {
+            texture.repeat.set(screenAspect / imageAspect, 1)
+            texture.offset.set((1 - screenAspect / imageAspect) / 2, 0)
+          }
+        }
+
+        adjustBackground()
+        if (texture.image) {
+          texture.image.addEventListener('load', adjustBackground)
+        }
+        window.addEventListener('resize', adjustBackground)
+      }, undefined, (err) => {
+        console.error('Failed to load Fond.png background texture:', err)
       })
     }
 
@@ -163,25 +375,25 @@
     }
 
     // ── Chargement GLB ────────────────────────────────────────────────────
-    const loader  = new GLTFLoader()
-    const models  = []
+    const loader = new GLTFLoader()
+    const models = []
     const hovered = {}
     const animState = {}
-    for (let i = 0; i < 5; i++) animState[i] = { progress: 0 }
+    for (let i = 0; i < bottles.length; i++) animState[i] = { progress: 0 }
     const startX = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
     let done = 0
 
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
-      fixGlass(obj)
+
 
       const tmp = new THREE.Group()
       tmp.add(obj)
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
-      const box1   = new THREE.Box3().setFromObject(tmp)
-      const size1  = box1.getSize(new THREE.Vector3())
+      const box1 = new THREE.Box3().setFromObject(tmp)
+      const size1 = box1.getSize(new THREE.Vector3())
       const maxDim = Math.max(size1.x, size1.y, size1.z)
       scene.remove(tmp)
 
@@ -189,7 +401,7 @@
       tmp.scale.setScalar(s)
       scene.add(tmp)
       tmp.updateMatrixWorld(true)
-      const box2   = new THREE.Box3().setFromObject(tmp)
+      const box2 = new THREE.Box3().setFromObject(tmp)
       const center = box2.getCenter(new THREE.Vector3())
       tmp.position.x -= center.x
       tmp.position.z -= center.z
@@ -205,18 +417,23 @@
       models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
       done++
       if (done === bottles.length) msg.style.display = 'none'
+      fixGlass(obj, bottles[i].url)
     }
 
     bottles.forEach((bottle, i) => {
       loader.load(bottle.url, (gltf) => placeModel(gltf, i, bottle.scale),
-        undefined, (err) => { console.error(err); done++ })
+        undefined, (err) => {
+          console.error(`Failed to load ${bottle.url}:`, err)
+          done++
+          if (done === bottles.length) msg.style.display = 'none'
+        })
     })
 
     // ── Raycaster ─────────────────────────────────────────────────────────
     const ray = new THREE.Raycaster(), mouse = new THREE.Vector2()
     function getHit(e) {
       const r = renderer.domElement.getBoundingClientRect()
-      mouse.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1)
+      mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
       ray.setFromCamera(mouse, camera)
       const hits = ray.intersectObjects(models.map(m => m.group), true)
       if (!hits.length) return null
@@ -237,7 +454,7 @@
           tooltip.textContent = label
           tooltip.style.display = 'block'
           tooltip.style.left = e.clientX + 'px'
-          tooltip.style.top  = (e.clientY - 16) + 'px'
+          tooltip.style.top = (e.clientY - 16) + 'px'
         } else {
           tooltip.style.display = 'none'
         }
@@ -267,7 +484,7 @@
         if (!a) return
 
         if (h) a.progress = Math.min(1, a.progress + 0.06)
-        else   a.progress = Math.max(0, a.progress - 0.045)
+        else a.progress = Math.max(0, a.progress - 0.045)
 
         const ep = easeOutElastic(a.progress)
         const cp = easeOutCubic(a.progress)
@@ -282,4 +499,5 @@
     animate()
   </script>
 </body>
+
 </html>
