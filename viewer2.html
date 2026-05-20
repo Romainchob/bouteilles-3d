@@ -342,9 +342,9 @@
       // Set background color fallback on the body
       document.body.style.background = '#222'
 
-      // Load Fond.png inside the Three.js scene so that it can be refracted by the transmissive glass!
+      // Load FOND map.png inside the Three.js scene so that it can be refracted by the transmissive glass!
       const texLoader = new THREE.TextureLoader()
-      texLoader.load('Fond.png', (texture) => {
+      texLoader.load('FOND map.png', (texture) => {
         texture.colorSpace = THREE.SRGBColorSpace
         scene.background = texture
 
@@ -372,7 +372,7 @@
         }
         window.addEventListener('resize', adjustBackground)
       }, undefined, (err) => {
-        console.error('Failed to load Fond.png background texture:', err)
+        console.error('Failed to load FOND map.png background texture:', err)
       })
     }
 
