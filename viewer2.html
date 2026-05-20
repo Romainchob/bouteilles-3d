@@ -189,18 +189,23 @@
     function updateMaterials() {
       renderer.toneMappingExposure = guiParams.exposure
       models.forEach(m => {
+        const isRouge = (m.url || '').toLowerCase().includes('rouge')
         m.group.traverse(child => {
           if (!child.isMesh) return
           const mats = Array.isArray(child.material) ? child.material : [child.material]
           mats.forEach(mat => {
             if (!mat || !mat.userData.isGlass) return
-            mat.transmission = guiParams.transmission
-            mat.roughness = guiParams.roughness
+            const name = (mat.name || '').toLowerCase()
+            const isOuterGlass = isRouge && (name.includes('white') || name.includes('wine'))
+            const isInnerWine = isRouge && name.includes('glas')
+
+            mat.transmission = isRouge ? 1.0 : guiParams.transmission
+            mat.roughness = isRouge ? 0.01 : guiParams.roughness
             mat.metalness = guiParams.metalness
-            mat.ior = guiParams.ior
-            mat.thickness = guiParams.thickness
+            mat.ior = isOuterGlass ? 1.52 : (isInnerWine ? 1.34 : guiParams.ior)
+            mat.thickness = isOuterGlass ? 1.5 : (isInnerWine ? 0.5 : guiParams.thickness)
             mat.dispersion = guiParams.dispersion
-            mat.envMapIntensity = guiParams.envMapIntensity
+            mat.envMapIntensity = isOuterGlass ? 4.5 : (isInnerWine ? 2.0 : guiParams.envMapIntensity)
             mat.needsUpdate = true
           })
         })
@@ -258,13 +263,31 @@
           )
 
           if (isGlass) {
+            const isRouge = filename.includes('rouge')
+            const isOuterGlass = isRouge && (name.includes('white') || name.includes('wine'))
+            const isInnerWine = isRouge && name.includes('glas')
+
             // Boost very dark glass colors to be visible transmissive colors while maintaining their exact hue/tint
             const glassColor = mat.color ? mat.color.clone() : new THREE.Color(0xffffff)
-            const maxChannel = Math.max(glassColor.r, glassColor.g, glassColor.b)
-            if (maxChannel > 0 && maxChannel < 0.18) {
-              const boost = 0.18 / maxChannel
-              glassColor.multiplyScalar(boost)
+            if (isOuterGlass) {
+              // Outer glass bottle is beautifully clear and crisp with a very subtle warm touch
+              glassColor.set('#fffef6')
+            } else if (isInnerWine) {
+              // Inner wine liquid is a highly vibrant, glowing golden honey color
+              glassColor.set('#ecd15b')
+            } else {
+              const maxChannel = Math.max(glassColor.r, glassColor.g, glassColor.b)
+              if (maxChannel > 0 && maxChannel < 0.18) {
+                const boost = 0.18 / maxChannel
+                glassColor.multiplyScalar(boost)
+              }
             }
+
+            const finalIor = isOuterGlass ? 1.52 : (isInnerWine ? 1.34 : guiParams.ior)
+            const finalThickness = isOuterGlass ? 1.5 : (isInnerWine ? 0.5 : guiParams.thickness)
+            const finalRoughness = isRouge ? 0.01 : guiParams.roughness
+            const finalEnvIntensity = isOuterGlass ? 4.5 : (isInnerWine ? 2.0 : guiParams.envMapIntensity)
+            const finalTransmission = isRouge ? 1.0 : guiParams.transmission
 
             // Case 1: The material already has transmissive glass setup (from KHR_materials_transmission)
             if (mat.isMeshPhysicalMaterial) {
@@ -272,14 +295,14 @@
               mat.color.copy(glassColor)
               mat.transparent = true
               mat.opacity = 1.0
-              mat.transmission = guiParams.transmission
-              mat.roughness = guiParams.roughness
+              mat.transmission = finalTransmission
+              mat.roughness = finalRoughness
               mat.metalness = guiParams.metalness
-              mat.ior = guiParams.ior
-              mat.thickness = guiParams.thickness
+              mat.ior = finalIor
+              mat.thickness = finalThickness
               mat.dispersion = guiParams.dispersion // Rainbow dispersion effect!
               mat.envMap = envTexture
-              mat.envMapIntensity = guiParams.envMapIntensity
+              mat.envMapIntensity = finalEnvIntensity
               mat.needsUpdate = true
               return
             }
@@ -292,14 +315,14 @@
               roughnessMap: mat.roughnessMap || null,
               metalnessMap: mat.metalnessMap || null,
               aoMap: mat.aoMap || null,
-              roughness: guiParams.roughness,
+              roughness: finalRoughness,
               metalness: guiParams.metalness,
-              ior: guiParams.ior,
-              transmission: guiParams.transmission,
-              thickness: guiParams.thickness,
+              ior: finalIor,
+              transmission: finalTransmission,
+              thickness: finalThickness,
               dispersion: guiParams.dispersion, // Enable rainbow dispersion!
               envMap: envTexture,
-              envMapIntensity: guiParams.envMapIntensity,
+              envMapIntensity: finalEnvIntensity,
               side: THREE.DoubleSide,
               transparent: true,
               opacity: 1.0
@@ -414,7 +437,7 @@
       scene.add(group)
 
       hovered[i] = false
-      models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i })
+      models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i, url: bottles[i].url })
       done++
       if (done === bottles.length) msg.style.display = 'none'
       fixGlass(obj, bottles[i].url)
