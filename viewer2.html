@@ -86,27 +86,33 @@
       transition: opacity 0.15s ease;
     }
 
-    #bottom-title {
+    #bottom-title-container {
       position: fixed;
-      bottom: 40px;
-      left: 60px;
+      bottom: 25px;
+      left: 50px;
       z-index: 10;
       pointer-events: none;
+      overflow: hidden;
+      padding: 15px 30px 10px 10px;
+    }
+
+    #bottom-title {
+      display: inline-block;
       font-family: 'PP Pangaia', 'Roslindale', 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
       font-size: clamp(48px, 9vw, 162px);
       font-weight: 500;
       color: #ffffff;
       letter-spacing: -0.01em;
       line-height: 1.2em;
-      transition: opacity 0.3s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-      opacity: 1;
-      transform: translateY(0);
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+      
+      transform: translateY(0);
+      transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     #bottom-title.changing {
-      opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(105%);
+      transition: transform 0.28s cubic-bezier(0.7, 0, 0.84, 0);
     }
 
     #foreground-overlay {
@@ -124,7 +130,9 @@
 <body>
   <div id="msg">Chargement...</div>
   <div id="tooltip"></div>
-  <div id="bottom-title">La sélection</div>
+  <div id="bottom-title-container">
+    <div id="bottom-title" class="changing">La sélection</div>
+  </div>
   <img id="foreground-overlay" src="Vigne plan 1.png" alt="Vignes Premier Plan" />
   <script type="importmap">
   {
@@ -174,17 +182,26 @@
     const bottomTitle = document.getElementById('bottom-title')
     if (bottomTitle) {
       bottomTitle.textContent = defaultTitle
+      // Déclenchement de l'animation d'entrée sur le chargement initial
+      setTimeout(() => {
+        bottomTitle.classList.remove('changing')
+      }, 400)
     }
 
     let currentTitleText = defaultTitle
+    let titleTimeout = null
+    let resetTitleTimeout = null
     function updateBottomTitle(newText) {
       if (!bottomTitle || currentTitleText === newText) return
       currentTitleText = newText
+      
+      if (titleTimeout) clearTimeout(titleTimeout)
+      
       bottomTitle.classList.add('changing')
-      setTimeout(() => {
+      titleTimeout = setTimeout(() => {
         bottomTitle.textContent = newText
         bottomTitle.classList.remove('changing')
-      }, 150)
+      }, 280) // Se déclenche après la fin de la descente rapide
     }
 
     const seen = new Set()
@@ -551,9 +568,26 @@
     window.addEventListener('mousemove', e => {
       models.forEach(m => hovered[m.idx] = false)
       const h = getHit(e)
+      
+      const screenHeight = window.innerHeight
+      const screenWidth = window.innerWidth
+      const mouseY = e.clientY
+      const mouseX = e.clientX
+      
+      // Délimitation de la zone générale horizontale et verticale des bouteilles
+      const isInActiveZone = mouseY > screenHeight * 0.12 && mouseY < screenHeight * 0.85 &&
+                             mouseX > screenWidth * 0.08 && mouseX < screenWidth * 0.92
+
       if (h) {
         hovered[h.idx] = true
         renderer.domElement.style.cursor = 'pointer'
+        
+        // Annuler toute réinitialisation si on survole à nouveau une bouteille
+        if (resetTitleTimeout) {
+          clearTimeout(resetTitleTimeout)
+          resetTitleTimeout = null
+        }
+        
         // Afficher le tooltip
         const label = labels[h.idx + 1]
         if (label) {
@@ -569,7 +603,22 @@
       } else {
         renderer.domElement.style.cursor = 'default'
         tooltip.style.display = 'none'
-        updateBottomTitle(defaultTitle)
+        
+        if (isInActiveZone) {
+          // Si on est toujours dans la zone générale des bouteilles, on conserve le nom de la dernière bouteille survolée (pas de reset intempestif)
+          if (resetTitleTimeout) {
+            clearTimeout(resetTitleTimeout)
+            resetTitleTimeout = null
+          }
+        } else {
+          // Si le curseur sort de l'espace général des bouteilles (vers le haut/menu, le bas/footer ou les côtés)
+          if (!resetTitleTimeout) {
+            resetTitleTimeout = setTimeout(() => {
+              updateBottomTitle(defaultTitle)
+              resetTitleTimeout = null
+            }, 200)
+          }
+        }
       }
     })
 
