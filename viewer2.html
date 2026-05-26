@@ -88,12 +88,26 @@
 
     #bottom-title-container {
       position: fixed;
-      bottom: 14px; /* 14px + 10px padding-bottom = 24px relative to the screen edge */
-      left: 30px;   /* 30px + 10px padding-left = 40px relative to the screen edge */
+      bottom: 24px;
+      left: 40px;
       z-index: 10;
       pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      gap: 30px;
+    }
+
+    .mask-title {
       overflow: hidden;
-      padding: 15px 30px 10px 10px;
+      padding-top: 15px;
+      margin-top: -15px;
+    }
+
+    .mask-metadata {
+      overflow: hidden;
+      padding-top: 10px;
+      margin-top: -10px;
+      align-self: flex-end;
     }
 
     #bottom-title {
@@ -103,7 +117,7 @@
       font-weight: 500;
       color: #ffffff;
       letter-spacing: -0.01em;
-      line-height: 1.2em;
+      line-height: 0.9em;
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
       
       transform: translateY(0);
@@ -113,6 +127,51 @@
     #bottom-title.changing {
       transform: translateY(105%);
       transition: transform 0.18s cubic-bezier(0.7, 0, 0.84, 0);
+    }
+
+    .metadata-stack {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 6px;
+      text-shadow: none;
+      transform: translateY(0);
+      transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .metadata-stack.changing {
+      transform: translateY(110%);
+      transition: transform 0.18s cubic-bezier(0.7, 0, 0.84, 0);
+    }
+
+    .wine-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 42px;
+      padding: 4px 12px;
+      background: #F9F9EF;
+      color: #3b0a0a;
+      font-family: 'Halyard Display', 'PP Pangaia', sans-serif;
+      font-size: 24px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      border-radius: 0;
+      box-sizing: border-box;
+      white-space: nowrap;
+      text-transform: none;
+    }
+
+    .winemaker-text {
+      color: #ffffff;
+      font-family: 'Halyard Display', 'PP Pangaia', sans-serif;
+      font-size: clamp(16px, 1.8vw, 24px);
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      opacity: 0.9;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
     }
 
     #foreground-overlay {
@@ -131,7 +190,15 @@
   <div id="msg">Chargement...</div>
   <div id="tooltip"></div>
   <div id="bottom-title-container">
-    <div id="bottom-title" class="changing">La sélection</div>
+    <div class="mask-title">
+      <div id="bottom-title" class="changing">La sélection</div>
+    </div>
+    <div class="mask-metadata">
+      <div class="metadata-stack changing" style="display: none;">
+        <span class="wine-tag"></span>
+        <span class="winemaker-text"></span>
+      </div>
+    </div>
   </div>
   <img id="foreground-overlay" src="Vigne plan 1.png" alt="Vignes Premier Plan" />
   <script type="importmap">
@@ -161,8 +228,12 @@
     const tooltipRadius = p.get('tooltipRadius') || '6px'
     const tooltipPadding = p.get('tooltipPadding') || '6px 12px'
     const labels = {}
+    const tags = {}
+    const domains = {}
     for (let i = 1; i <= 5; i++) {
       labels[i] = p.get('label' + i) || ''
+      tags[i] = p.get('tag' + i) || ''
+      domains[i] = p.get('domain' + i) || ''
     }
 
     // Appliquer le style du tooltip
@@ -180,8 +251,10 @@
     // Titre dynamique en bas à gauche
     const defaultTitle = p.get('defaultTitle') || 'La sélection'
     const bottomTitle = document.getElementById('bottom-title')
+    const metadataStack = document.querySelector('.metadata-stack')
     if (bottomTitle) {
       bottomTitle.textContent = defaultTitle
+      
       // Déclenchement de l'animation d'entrée sur le chargement initial
       setTimeout(() => {
         bottomTitle.classList.remove('changing')
@@ -191,16 +264,34 @@
     let currentTitleText = defaultTitle
     let titleTimeout = null
     let resetTitleTimeout = null
-    function updateBottomTitle(newText) {
-      if (!bottomTitle || currentTitleText === newText) return
-      currentTitleText = newText
+    function updateBottomTitle(newText, newTag = '', newDomain = '') {
+      const combinedKey = `${newText}|${newTag}|${newDomain}`
+      if (bottomTitle && bottomTitle.dataset.combinedKey === combinedKey) return
+      if (bottomTitle) bottomTitle.dataset.combinedKey = combinedKey
       
       if (titleTimeout) clearTimeout(titleTimeout)
       
-      bottomTitle.classList.add('changing')
+      if (bottomTitle) bottomTitle.classList.add('changing')
+      if (metadataStack) metadataStack.classList.add('changing')
+      
       titleTimeout = setTimeout(() => {
-        bottomTitle.textContent = newText
-        bottomTitle.classList.remove('changing')
+        if (bottomTitle) bottomTitle.textContent = newText
+        
+        const tagSpan = document.querySelector('.wine-tag')
+        const domainSpan = document.querySelector('.winemaker-text')
+        
+        if (newTag && newDomain && metadataStack && tagSpan && domainSpan) {
+          tagSpan.textContent = newTag
+          domainSpan.textContent = newDomain
+          metadataStack.style.display = 'inline-flex'
+          
+          metadataStack.offsetHeight // force layout reflow
+          metadataStack.classList.remove('changing')
+        } else if (metadataStack) {
+          metadataStack.style.display = 'none'
+        }
+        
+        if (bottomTitle) bottomTitle.classList.remove('changing')
       }, 180) // Se déclenche après la fin de la descente rapide
     }
 
@@ -218,15 +309,17 @@
     if (bottles.length === 0) {
       console.log("No custom model parameters (?url1=...) found in the URL. Loading default local models.");
       const defaults = [
-        { url: 'Canette2.glb', label: 'Canette' },
-        { url: 'bierre.glb', label: 'Bière' },
-        { url: 'bottlemiglia.glb', label: 'Miglia' },
-        { url: 'papa.glb', label: 'Papa' },
-        { url: 'rougeglb.glb', label: 'Rouge' }
+        { url: 'Canette2.glb', label: 'La petite filoute', tag: 'Soda', domain: 'MonBissac' },
+        { url: 'bierre.glb', label: 'Aperitivo', tag: 'Apéritif', domain: 'MonBissac' },
+        { url: 'bottlemiglia.glb', label: 'Miglia', tag: 'Vin rouge', domain: 'MonBissac' },
+        { url: 'papa.glb', label: 'Extra Chuunk', tag: 'Bière ambrée', domain: 'MonBissac' },
+        { url: 'rougeglb.glb', label: 'Muscadet', tag: 'Vin blanc', domain: 'Domaine du haut bourg' }
       ]
       defaults.forEach((item, idx) => {
         bottles.push({ url: item.url, link: '/', scale: 1 })
         labels[idx + 1] = item.label
+        tags[idx + 1] = item.tag
+        domains[idx + 1] = item.domain
       })
     }
 
@@ -590,12 +683,14 @@
         
         // Afficher le tooltip
         const label = labels[h.idx + 1]
+        const tag = tags[h.idx + 1]
+        const domain = domains[h.idx + 1]
         if (label) {
           tooltip.textContent = label
           tooltip.style.display = 'block'
           tooltip.style.left = e.clientX + 'px'
           tooltip.style.top = (e.clientY - 16) + 'px'
-          updateBottomTitle(label)
+          updateBottomTitle(label, tag, domain)
         } else {
           tooltip.style.display = 'none'
           updateBottomTitle(defaultTitle)
