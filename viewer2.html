@@ -528,7 +528,23 @@
             // For non-glass materials (labels, caps, metal cans):
             // Keep their original authored textures/metallic parameters, but apply the environment map for realistic reflections!
             mat.envMap = envTexture
-            mat.envMapIntensity = isCan ? 2.5 : 3.5
+            
+            // Check if the material is a paper label. Labels should not be highly reflective/luminous.
+            const isLabel = 
+              name.includes('label') ||
+              name.includes('etiquette') ||
+              name.includes('empty') || // Matches 'Empty.003' and 'Empty.004' on papa.glb
+              name.includes('material.003') // Matches 'Material.003' on bottlemiglia.glb
+              
+            if (isLabel) {
+              mat.envMapIntensity = 0.3 // Significantly reduced reflection to make text readable
+              if (mat.roughness < 0.6) {
+                mat.roughness = 0.8 // Matte paper texture
+              }
+            } else {
+              mat.envMapIntensity = isCan ? 2.5 : 3.5
+            }
+            
             mat.needsUpdate = true
           }
         })
