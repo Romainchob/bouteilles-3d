@@ -183,6 +183,130 @@
       z-index: 2;
       pointer-events: none;
     }
+
+    /* ── Bouton Audio Glassmorphism & Égaliseur ─────────────────────────── */
+    #audio-control {
+      position: fixed;
+      top: 30px;
+      right: 40px;
+      z-index: 100;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    #audio-control:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: scale(1.08);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    #audio-control:active {
+      transform: scale(0.95);
+    }
+
+    /* Égaliseur visuel */
+    .equalizer {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 18px;
+      position: relative;
+    }
+
+    .eq-bar {
+      width: 3px;
+      height: 3px;
+      background-color: #F9F9EF;
+      border-radius: 1.5px;
+      transition: height 0.3s ease;
+    }
+
+    /* Animations de rebond pour l'égaliseur quand actif */
+    .playing .eq-bar:nth-child(1) {
+      animation: eq-bounce 0.8s ease-in-out infinite alternate;
+      animation-delay: 0.1s;
+    }
+    .playing .eq-bar:nth-child(2) {
+      animation: eq-bounce 0.7s ease-in-out infinite alternate;
+      animation-delay: 0.3s;
+    }
+    .playing .eq-bar:nth-child(3) {
+      animation: eq-bounce 0.9s ease-in-out infinite alternate;
+      animation-delay: 0s;
+    }
+    .playing .eq-bar:nth-child(4) {
+      animation: eq-bounce 0.6s ease-in-out infinite alternate;
+      animation-delay: 0.2s;
+    }
+
+    @keyframes eq-bounce {
+      0% {
+        height: 4px;
+      }
+      100% {
+        height: 16px;
+      }
+    }
+
+    /* Ligne de coupure en diagonale pour l'état muet */
+    #audio-control .mute-line {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 2px;
+      background-color: #ffffff;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    }
+
+    #audio-control.muted .mute-line {
+      width: 28px;
+    }
+
+    #audio-control.muted .eq-bar {
+      height: 3px !important;
+      opacity: 0.5;
+    }
+
+    /* Tooltip élégant */
+    .audio-tooltip {
+      position: absolute;
+      right: 56px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: 'Halyard Display', 'PP Pangaia', sans-serif;
+      font-size: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateX(10px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      backdrop-filter: blur(8px);
+    }
+
+    #audio-control:hover .audio-tooltip {
+      opacity: 1;
+      transform: translateX(0);
+    }
   </style>
 </head>
 
@@ -201,6 +325,18 @@
     </div>
   </div>
   <img id="foreground-overlay" src="Vigne plan 1.png" alt="Vignes Premier Plan" />
+
+  <!-- Bouton de contrôle audio haut de gamme -->
+  <button id="audio-control" class="muted" aria-label="Contrôle de la musique">
+    <div class="equalizer">
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+      <div class="eq-bar"></div>
+    </div>
+    <div class="mute-line"></div>
+    <div class="audio-tooltip">Activer la musique</div>
+  </button>
   <script type="importmap">
   {
     "imports": {
@@ -743,6 +879,123 @@
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
     })
+
+    // ── Gestion Audio & Musique d'ambiance ────────────────────────────────
+    const audioFile = 'Audio page acceuile.mp3'
+    const audio = new Audio(audioFile)
+    audio.loop = true
+    audio.volume = 0.0 // On commence à volume 0 pour le fade-in progressif
+
+    const audioBtn = document.getElementById('audio-control')
+    const tooltipText = audioBtn.querySelector('.audio-tooltip')
+
+    // Lire la préférence de l'utilisateur (par défaut non-muet)
+    let isMuted = localStorage.getItem('audioMuted') === 'true'
+    let audioInitialized = false
+    let targetVolume = 0.35 // Volume d'ambiance discret et élégant
+
+    // Configurer l'état visuel initial du bouton
+    if (isMuted) {
+      audioBtn.classList.add('muted')
+      audioBtn.classList.remove('playing')
+      tooltipText.textContent = 'Activer la musique'
+    } else {
+      audioBtn.classList.remove('muted')
+      audioBtn.classList.remove('playing')
+      tooltipText.textContent = 'Couper la musique'
+    }
+
+    // Fonction de transition douce du volume (fade-in / fade-out)
+    let fadeInterval = null
+    function fadeVolume(target, duration = 1000) {
+      if (fadeInterval) clearInterval(fadeInterval)
+      
+      const steps = 20
+      const stepTime = duration / steps
+      const startVolume = audio.volume
+      const diff = target - startVolume
+      let stepCount = 0
+
+      if (diff === 0) return
+
+      // S'assurer que l'audio est en cours de lecture si on augmente le son
+      if (target > 0 && audio.paused) {
+        audio.play().catch(e => console.log("Attente d'interaction utilisateur pour jouer le son"))
+      }
+
+      fadeInterval = setInterval(() => {
+        stepCount++
+        const progress = stepCount / steps
+        audio.volume = Math.max(0, Math.min(1, startVolume + diff * progress))
+
+        if (stepCount >= steps) {
+          clearInterval(fadeInterval)
+          audio.volume = target
+          if (target === 0) {
+            audio.pause()
+          }
+        }
+      }, stepTime)
+    }
+
+    // Gestion du bouton bascule (mute/unmute)
+    function toggleAudio() {
+      isMuted = !isMuted
+      localStorage.setItem('audioMuted', isMuted ? 'true' : 'false')
+      
+      if (isMuted) {
+        audioBtn.classList.add('muted')
+        audioBtn.classList.remove('playing')
+        tooltipText.textContent = 'Activer la musique'
+        fadeVolume(0, 500)
+      } else {
+        audioBtn.classList.remove('muted')
+        tooltipText.textContent = 'Couper la musique'
+        
+        // Si l'utilisateur clique alors que le son était coupé, on force l'activation
+        audio.play().then(() => {
+          audioInitialized = true
+          audioBtn.classList.add('playing')
+          fadeVolume(targetVolume, 800)
+        }).catch(err => {
+          console.error("Erreur de lecture audio lors du clic bouton:", err)
+        })
+      }
+    }
+
+    audioBtn.addEventListener('click', (e) => {
+      e.stopPropagation() // Évite de déclencher initAudioOnInteraction sur le conteneur window
+      toggleAudio()
+    })
+
+    // Démarrer l'audio à la première interaction utilisateur sur le document
+    function initAudioOnInteraction() {
+      if (audioInitialized || isMuted) {
+        // Si déjà initialisé ou si l'utilisateur a choisi de couper le son, on nettoie simplement les écouteurs
+        window.removeEventListener('click', initAudioOnInteraction)
+        window.removeEventListener('touchstart', initAudioOnInteraction)
+        return
+      }
+      
+      // Tenter de démarrer la musique
+      audio.play().then(() => {
+        audioInitialized = true
+        window.removeEventListener('click', initAudioOnInteraction)
+        window.removeEventListener('touchstart', initAudioOnInteraction)
+        
+        audioBtn.classList.remove('muted')
+        audioBtn.classList.add('playing')
+        tooltipText.textContent = 'Couper la musique'
+        fadeVolume(targetVolume, 800)
+      }).catch(err => {
+        // En cas de blocage persistant par le navigateur, on garde les écouteurs actifs
+        console.log("Autoplay en attente d'une interaction utilisateur valide.")
+      })
+    }
+
+    // Écouteurs d'interactions pour l'autoplay
+    window.addEventListener('click', initAudioOnInteraction)
+    window.addEventListener('touchstart', initAudioOnInteraction)
 
     // ── Animation ─────────────────────────────────────────────────────────
     function animate() {
