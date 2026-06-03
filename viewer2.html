@@ -309,7 +309,58 @@
       transform: translateX(0);
     }
 
+    /* Boutons Flèches de Navigation Mobile */
+    .nav-arrow {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 90;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: none; /* Masqué sur PC */
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    #nav-arrow-left {
+      left: 20px;
+    }
+
+    #nav-arrow-right {
+      right: 20px;
+    }
+
+    .nav-arrow:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-50%) scale(1.08);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .nav-arrow:active {
+      transform: translateY(-50%) scale(0.95);
+    }
+
+    .nav-arrow.disabled {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-50%) scale(0.8);
+    }
+
     @media (max-width: 700px) {
+      .nav-arrow {
+        display: flex; /* Affiché sur Mobile */
+      }
       #bottom-title-container {
         left: 24px;
         bottom: 48px;
@@ -365,6 +416,18 @@
     </div>
     <div class="mute-line"></div>
     <div class="audio-tooltip">Activer la musique</div>
+  </button>
+
+  <!-- Flèches de navigation mobiles -->
+  <button id="nav-arrow-left" class="nav-arrow disabled" aria-label="Bouteille précédente">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"></polyline>
+    </svg>
+  </button>
+  <button id="nav-arrow-right" class="nav-arrow disabled" aria-label="Bouteille suivante">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
   </button>
   <script type="importmap">
   {
@@ -777,13 +840,20 @@
     let isDragging = false
     let dragStartX = 0
     let dragDeltaX = 0
-    const startX = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
-    let containerTargetX = isMobile ? -(startX + activeIndex * spacing) : 0
-    let baseContainerX = 0
-    
+
     // Variables pour la simulation de ressort (spring physics)
     let velocityX = 0
     let lastFrameTime = performance.now()
+
+    function getLayout() {
+      const currentSpacing = isMobile ? 3.5 : spacing
+      const currentStartX = bottles.length ? -((bottles.length - 1) * currentSpacing) / 2 : 0
+      return { spacing: currentSpacing, startX: currentStartX }
+    }
+
+    const layout = getLayout()
+    let containerTargetX = isMobile ? -(layout.startX + activeIndex * layout.spacing) : 0
+    let baseContainerX = 0
 
     const bottlesContainer = new THREE.Group()
     bottlesContainer.position.x = containerTargetX
@@ -799,6 +869,53 @@
         updateBottomTitle(defaultTitle)
       }
     }
+
+    const arrowLeft = document.getElementById('nav-arrow-left')
+    const arrowRight = document.getElementById('nav-arrow-right')
+
+    function updateArrowVisibility() {
+      if (isMobile) {
+        if (activeIndex === 0) {
+          arrowLeft.classList.add('disabled')
+        } else {
+          arrowLeft.classList.remove('disabled')
+        }
+
+        if (activeIndex === bottles.length - 1) {
+          arrowRight.classList.add('disabled')
+        } else {
+          arrowRight.classList.remove('disabled')
+        }
+      } else {
+        arrowLeft.classList.add('disabled')
+        arrowRight.classList.add('disabled')
+      }
+    }
+
+    arrowLeft.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (activeIndex > 0) {
+        activeIndex--
+        updateMobileTitle()
+        updateArrowVisibility()
+        const currentLayout = getLayout()
+        containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
+      }
+    })
+
+    arrowRight.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (activeIndex < bottles.length - 1) {
+        activeIndex++
+        updateMobileTitle()
+        updateArrowVisibility()
+        const currentLayout = getLayout()
+        containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
+      }
+    })
+
+    // Initialiser la visibilité des flèches au démarrage
+    updateArrowVisibility()
 
     const loader = new GLTFLoader()
     const models = []
@@ -833,7 +950,8 @@
 
       const group = new THREE.Group()
       group.add(tmp)
-      group.position.set(startX + i * spacing, -0.5, 0)
+      const currentLayout = getLayout()
+      group.position.set(currentLayout.startX + i * currentLayout.spacing, -0.5, 0)
       bottlesContainer.add(group)
 
       hovered[i] = false
@@ -966,7 +1084,8 @@
       let worldDeltaX = dragDeltaX * worldWidthPerPixel
       
       // Limiter le déplacement physique au maximum d'une bouteille (spacing) à gauche ou à droite
-      const clampedWorldDeltaX = Math.max(-spacing, Math.min(spacing, worldDeltaX))
+      const currentLayout = getLayout()
+      const clampedWorldDeltaX = Math.max(-currentLayout.spacing, Math.min(currentLayout.spacing, worldDeltaX))
       
       bottlesContainer.position.x = baseContainerX + clampedWorldDeltaX
     }
@@ -981,16 +1100,19 @@
         if (activeIndex > 0) {
           activeIndex--
           updateMobileTitle()
+          updateArrowVisibility()
         }
       } else if (dragDeltaX < -threshold) {
         // Swipe vers la gauche -> Bouteille suivante
         if (activeIndex < bottles.length - 1) {
           activeIndex++
           updateMobileTitle()
+          updateArrowVisibility()
         }
       }
       
-      containerTargetX = -(startX + activeIndex * spacing)
+      const currentLayout = getLayout()
+      containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
     }
 
     window.addEventListener('mousedown', onDragStart)
@@ -1012,7 +1134,9 @@
             // Si on clique sur une bouteille non active, on glisse vers elle
             activeIndex = h.idx
             updateMobileTitle()
-            containerTargetX = -(startX + activeIndex * spacing)
+            updateArrowVisibility()
+            const currentLayout = getLayout()
+            containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
             return
           }
         }
@@ -1032,13 +1156,22 @@
           models.forEach(m => hovered[m.idx] = false)
           tooltip.style.display = 'none'
           updateMobileTitle()
+          updateArrowVisibility()
         } else {
           bottlesContainer.position.x = 0
           updateBottomTitle(defaultTitle)
+          updateArrowVisibility()
         }
       }
+
+      const currentLayout = getLayout()
+      // Mettre à jour la position de toutes les bouteilles selon le mode
+      models.forEach(m => {
+        m.group.position.x = currentLayout.startX + m.idx * currentLayout.spacing
+      })
+
       if (isMobile) {
-        containerTargetX = -(startX + activeIndex * spacing)
+        containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
       }
     })
 
