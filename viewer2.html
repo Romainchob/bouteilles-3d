@@ -848,6 +848,17 @@
     let isDragging = false
     let dragStartX = 0
     let dragDeltaX = 0
+    let isMuted = localStorage.getItem('audioMuted') === 'true'
+
+    const swooshAudio = new Audio('Swoosh.mp4')
+    function playSwoosh() {
+      if (isMuted) return
+      const clone = swooshAudio.cloneNode(true)
+      clone.volume = 0.35 // volume discret et agréable
+      clone.play().catch(e => {
+        // Ignorer les erreurs d'autoblock navigateur
+      })
+    }
 
     // Variables pour la simulation de ressort (spring physics)
     let velocityX = 0
@@ -906,6 +917,7 @@
         activeIndex--
         updateMobileTitle()
         updateArrowVisibility()
+        playSwoosh() // jouer le swoosh
         const currentLayout = getLayout()
         containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
       }
@@ -917,6 +929,7 @@
         activeIndex++
         updateMobileTitle()
         updateArrowVisibility()
+        playSwoosh() // jouer le swoosh
         const currentLayout = getLayout()
         containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
       }
@@ -1001,10 +1014,22 @@
       return models.find(m => m.group === o) || null
     }
 
+    let lastHoveredIndex = -1
+
     window.addEventListener('mousemove', e => {
       if (isMobile) return // désactiver le hover sur mobile
-      models.forEach(m => hovered[m.idx] = false)
+      
       const h = getHit(e)
+      const currentlyHoveredIdx = h ? h.idx : -1
+      
+      if (currentlyHoveredIdx !== lastHoveredIndex) {
+        if (currentlyHoveredIdx !== -1) {
+          playSwoosh()
+        }
+        lastHoveredIndex = currentlyHoveredIdx
+      }
+
+      models.forEach(m => hovered[m.idx] = (m.idx === currentlyHoveredIdx))
       
       const screenHeight = window.innerHeight
       const screenWidth = window.innerWidth
@@ -1016,7 +1041,6 @@
                              mouseX > screenWidth * 0.08 && mouseX < screenWidth * 0.92
 
       if (h) {
-        hovered[h.idx] = true
         renderer.domElement.style.cursor = 'pointer'
         
         // Annuler toute réinitialisation si on survole à nouveau une bouteille
@@ -1102,6 +1126,7 @@
       if (!isDragging || !isMobile) return
       isDragging = false
       
+      const oldIndex = activeIndex
       const threshold = window.innerWidth * 0.12 // Seuil à 12% de la largeur d'écran
       if (dragDeltaX > threshold) {
         // Swipe vers la droite -> Bouteille précédente
@@ -1117,6 +1142,10 @@
           updateMobileTitle()
           updateArrowVisibility()
         }
+      }
+      
+      if (activeIndex !== oldIndex) {
+        playSwoosh()
       }
       
       const currentLayout = getLayout()
@@ -1143,6 +1172,7 @@
             activeIndex = h.idx
             updateMobileTitle()
             updateArrowVisibility()
+            playSwoosh() // jouer le swoosh
             const currentLayout = getLayout()
             containerTargetX = -(currentLayout.startX + activeIndex * currentLayout.spacing)
             return
@@ -1192,8 +1222,7 @@
     const audioBtn = document.getElementById('audio-control')
     const tooltipText = audioBtn.querySelector('.audio-tooltip')
 
-    // Lire la préférence de l'utilisateur (par défaut non-muet)
-    let isMuted = localStorage.getItem('audioMuted') === 'true'
+    // Lire la préférence de l'utilisateur (déjà fait en haut du script)
     let audioInitialized = false
     let targetVolume = 0.35 // Volume d'ambiance discret et élégant
 
