@@ -93,8 +93,9 @@
       z-index: 10;
       pointer-events: none;
       display: flex;
-      align-items: flex-end;
-      gap: 30px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
     }
 
     .mask-title {
@@ -107,7 +108,7 @@
       overflow: hidden;
       padding-top: 10px;
       margin-top: -10px;
-      align-self: flex-end;
+      align-self: flex-start;
     }
 
     #bottom-title {
@@ -307,6 +308,34 @@
       opacity: 1;
       transform: translateX(0);
     }
+
+    @media (max-width: 700px) {
+      #bottom-title-container {
+        left: 24px;
+        bottom: 48px;
+        right: 110px; /* Ne pas chevaucher le bouton audio */
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        pointer-events: none;
+      }
+      #bottom-title {
+        font-size: clamp(32px, 8vw, 48px);
+        line-height: 1.0em;
+      }
+      .wine-tag {
+        height: 32px;
+        padding: 2px 8px;
+        font-size: 16px;
+      }
+      .winemaker-text {
+        font-size: 16px;
+      }
+      #audio-control {
+        bottom: 48px;
+        right: 48px;
+      }
+    }
   </style>
 </head>
 
@@ -319,8 +348,8 @@
     </div>
     <div class="mask-metadata">
       <div class="metadata-stack changing" style="display: none;">
-        <span class="wine-tag"></span>
         <span class="winemaker-text"></span>
+        <span class="wine-tag"></span>
       </div>
     </div>
   </div>
@@ -742,19 +771,45 @@
       return 1 - Math.pow(1 - t, 3)
     }
 
-    // ── Chargement GLB ────────────────────────────────────────────────────
+    // ── Chargement GLB & Configuration responsive/drag ──────────────────
+    let isMobile = window.innerWidth <= 700
+    let activeIndex = Math.floor(bottles.length / 2) // centrer par défaut la bouteille du milieu
+    let isDragging = false
+    let dragStartX = 0
+    let dragDeltaX = 0
+    const startX = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
+    let containerTargetX = isMobile ? -(startX + activeIndex * spacing) : 0
+    let baseContainerX = 0
+    
+    // Variables pour la simulation de ressort (spring physics)
+    let velocityX = 0
+    let lastFrameTime = performance.now()
+
+    const bottlesContainer = new THREE.Group()
+    bottlesContainer.position.x = containerTargetX
+    scene.add(bottlesContainer)
+
+    function updateMobileTitle() {
+      const label = labels[activeIndex + 1]
+      const tag = tags[activeIndex + 1]
+      const domain = domains[activeIndex + 1]
+      if (label) {
+        updateBottomTitle(label, tag, domain)
+      } else {
+        updateBottomTitle(defaultTitle)
+      }
+    }
+
     const loader = new GLTFLoader()
     const models = []
     const hovered = {}
     const animState = {}
     for (let i = 0; i < bottles.length; i++) animState[i] = { progress: 0 }
-    const startX = bottles.length ? -((bottles.length - 1) * spacing) / 2 : 0
     let done = 0
 
     function placeModel(gltf, i, bottleScale) {
       const obj = gltf.scene
       obj.rotation.y = THREE.MathUtils.degToRad(rotY)
-
 
       const tmp = new THREE.Group()
       tmp.add(obj)
@@ -779,12 +834,17 @@
       const group = new THREE.Group()
       group.add(tmp)
       group.position.set(startX + i * spacing, -0.5, 0)
-      scene.add(group)
+      bottlesContainer.add(group)
 
       hovered[i] = false
       models.push({ group, baseY: -0.5, tiltDir: i % 2 === 0 ? 1 : -1, link: bottles[i].link, idx: i, url: bottles[i].url })
       done++
-      if (done === bottles.length) msg.style.display = 'none'
+      if (done === bottles.length) {
+        msg.style.display = 'none'
+        if (isMobile) {
+          updateMobileTitle()
+        }
+      }
       fixGlass(obj, bottles[i].url)
     }
 
@@ -793,7 +853,12 @@
         undefined, (err) => {
           console.error(`Failed to load ${bottle.url}:`, err)
           done++
-          if (done === bottles.length) msg.style.display = 'none'
+          if (done === bottles.length) {
+            msg.style.display = 'none'
+            if (isMobile) {
+              updateMobileTitle()
+            }
+          }
         })
     })
 
@@ -811,6 +876,7 @@
     }
 
     window.addEventListener('mousemove', e => {
+      if (isMobile) return // désactiver le hover sur mobile
       models.forEach(m => hovered[m.idx] = false)
       const h = getHit(e)
       
@@ -869,15 +935,111 @@
       }
     })
 
+    // ── Détection et Gestion du Swipe / Drag ──────────────────────────────
+    function getClientX(e) {
+      if (e.touches && e.touches.length) return e.touches[0].clientX
+      return e.clientX
+    }
+
+    function onDragStart(e) {
+      if (!isMobile) return
+      
+      // Si clic sur le bouton audio, ne pas dragger
+      if (e.target.closest('#audio-control')) return
+
+      isDragging = true
+      dragStartX = getClientX(e)
+      baseContainerX = bottlesContainer.position.x
+      dragDeltaX = 0
+    }
+
+    function onDragMove(e) {
+      if (!isDragging || !isMobile) return
+      
+      const currentX = getClientX(e)
+      dragDeltaX = currentX - dragStartX
+      
+      // Conversion des pixels en déplacement Three.js
+      const fovRad = THREE.MathUtils.degToRad(camera.fov)
+      const worldWidthPerPixel = (2 * Math.tan(fovRad / 2) * camera.position.z) / window.innerHeight
+      
+      let worldDeltaX = dragDeltaX * worldWidthPerPixel
+      
+      // Limiter le déplacement physique au maximum d'une bouteille (spacing) à gauche ou à droite
+      const clampedWorldDeltaX = Math.max(-spacing, Math.min(spacing, worldDeltaX))
+      
+      bottlesContainer.position.x = baseContainerX + clampedWorldDeltaX
+    }
+
+    function onDragEnd() {
+      if (!isDragging || !isMobile) return
+      isDragging = false
+      
+      const threshold = window.innerWidth * 0.12 // Seuil à 12% de la largeur d'écran
+      if (dragDeltaX > threshold) {
+        // Swipe vers la droite -> Bouteille précédente
+        if (activeIndex > 0) {
+          activeIndex--
+          updateMobileTitle()
+        }
+      } else if (dragDeltaX < -threshold) {
+        // Swipe vers la gauche -> Bouteille suivante
+        if (activeIndex < bottles.length - 1) {
+          activeIndex++
+          updateMobileTitle()
+        }
+      }
+      
+      containerTargetX = -(startX + activeIndex * spacing)
+    }
+
+    window.addEventListener('mousedown', onDragStart)
+    window.addEventListener('mousemove', onDragMove)
+    window.addEventListener('mouseup', onDragEnd)
+
+    window.addEventListener('touchstart', onDragStart, { passive: true })
+    window.addEventListener('touchmove', onDragMove, { passive: true })
+    window.addEventListener('touchend', onDragEnd)
+
     window.addEventListener('click', e => {
+      // Éviter de naviguer si le clic provient d'un drag/swipe sur mobile
+      if (isMobile && Math.abs(dragDeltaX) > 8) return
+
       const h = getHit(e)
-      if (h?.link) window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+      if (h?.link) {
+        if (isMobile) {
+          if (h.idx !== activeIndex) {
+            // Si on clique sur une bouteille non active, on glisse vers elle
+            activeIndex = h.idx
+            updateMobileTitle()
+            containerTargetX = -(startX + activeIndex * spacing)
+            return
+          }
+        }
+        window.parent.postMessage({ type: 'navigate', link: h.link }, '*')
+      }
     })
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
+
+      const newIsMobile = window.innerWidth <= 700
+      if (newIsMobile !== isMobile) {
+        isMobile = newIsMobile
+        if (isMobile) {
+          models.forEach(m => hovered[m.idx] = false)
+          tooltip.style.display = 'none'
+          updateMobileTitle()
+        } else {
+          bottlesContainer.position.x = 0
+          updateBottomTitle(defaultTitle)
+        }
+      }
+      if (isMobile) {
+        containerTargetX = -(startX + activeIndex * spacing)
+      }
     })
 
     // ── Gestion Audio & Musique d'ambiance ────────────────────────────────
@@ -1000,6 +1162,35 @@
     // ── Animation ─────────────────────────────────────────────────────────
     function animate() {
       requestAnimationFrame(animate)
+
+      // Animation de translation par ressort physique (spring physics)
+      const now = performance.now()
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.1)
+      lastFrameTime = now
+
+      if (isMobile) {
+        if (!isDragging) {
+          const displacement = bottlesContainer.position.x - containerTargetX
+          const springForce = -100 * displacement
+          const damperForce = -22 * velocityX
+          const acceleration = springForce + damperForce
+          
+          velocityX += acceleration * dt
+          bottlesContainer.position.x += velocityX * dt
+        } else {
+          velocityX = 0
+        }
+      } else {
+        // En mode desktop, retour fluide à 0 avec le ressort
+        const displacement = bottlesContainer.position.x - 0
+        const springForce = -100 * displacement
+        const damperForce = -22 * velocityX
+        const acceleration = springForce + damperForce
+        
+        velocityX += acceleration * dt
+        bottlesContainer.position.x += velocityX * dt
+      }
+
       models.forEach(m => {
         const h = hovered[m.idx]
         const a = animState[m.idx]
@@ -1013,7 +1204,21 @@
 
         m.group.position.y += ((m.baseY + 0.28 * ep) - m.group.position.y) * 0.12
         m.group.rotation.y += (m.tiltDir * 0.2 * cp - m.group.rotation.y) * 0.08
-        m.group.rotation.z += (m.tiltDir * 0.06 * cp - m.group.rotation.z) * 0.08
+        
+        let targetRotZ = m.tiltDir * 0.06 * cp
+        if (isMobile) {
+          let dynamicZTilt = 0
+          if (isDragging) {
+            // Inclinaison proportionnelle à la distance parcourue pendant le drag
+            dynamicZTilt = (bottlesContainer.position.x - baseContainerX) * -0.08
+          } else {
+            // Inclinaison proportionnelle à la vitesse d'oscillation du ressort
+            dynamicZTilt = velocityX * -0.015
+          }
+          targetRotZ += dynamicZTilt
+        }
+        m.group.rotation.z += (targetRotZ - m.group.rotation.z) * 0.12
+
         m.group.scale.setScalar(1 + 0.03 * ep)
       })
       renderer.render(scene, camera)
