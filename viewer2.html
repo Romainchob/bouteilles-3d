@@ -93,9 +93,8 @@
       z-index: 10;
       pointer-events: none;
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 16px;
+      align-items: flex-end;
+      gap: 30px;
     }
 
     .mask-title {
@@ -108,7 +107,7 @@
       overflow: hidden;
       padding-top: 10px;
       margin-top: -10px;
-      align-self: flex-start;
+      align-self: flex-end;
     }
 
     #bottom-title {
@@ -374,12 +373,21 @@
         font-size: clamp(32px, 8vw, 48px);
         line-height: 1.0em;
       }
+      .mask-metadata {
+        align-self: flex-start; /* Aligner à gauche sous le titre sur mobile */
+      }
+      .metadata-stack {
+        flex-direction: row; /* Alignement horizontal sur mobile */
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 0;
+      }
+      .winemaker-text {
+        font-size: 16px;
+      }
       .wine-tag {
         height: 32px;
         padding: 2px 8px;
-        font-size: 16px;
-      }
-      .winemaker-text {
         font-size: 16px;
       }
       #audio-control {
@@ -399,8 +407,8 @@
     </div>
     <div class="mask-metadata">
       <div class="metadata-stack changing" style="display: none;">
-        <span class="winemaker-text"></span>
         <span class="wine-tag"></span>
+        <span class="winemaker-text"></span>
       </div>
     </div>
   </div>
