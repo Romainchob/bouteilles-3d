@@ -854,7 +854,8 @@
     function playSwoosh() {
       if (isMuted) return
       const clone = swooshAudio.cloneNode(true)
-      clone.volume = 0.35 // volume discret et agréable
+      // Baisser le volume sur PC (0.20) par rapport au mobile (0.35) car les survols sont plus fréquents
+      clone.volume = isMobile ? 0.35 : 0.20
       clone.play().catch(e => {
         // Ignorer les erreurs d'autoblock navigateur
       })
