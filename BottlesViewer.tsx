@@ -203,31 +203,30 @@ addPropertyControls(BottlesViewer, {
         displayStepper: true,
     },
 
-    // ── Bouteilles ──
+    // ── Bouteille 1 ──
     migliiaUrl: {
         type: ControlType.String,
-        title: "🍾 Miglia - URL",
-        defaultValue:
-            "https://romainchob.github.io/bouteilles-3d/bottlemiglia.glb",
+        title: "1️⃣ Bouteille 1 - URL",
+        defaultValue: "https://romainchob.github.io/bouteilles-3d/bottlemiglia.glb",
     },
     migliaLabel: {
         type: ControlType.String,
-        title: "🍾 Miglia - Nom",
+        title: "1️⃣ Bouteille 1 - Nom",
         defaultValue: "Miglia",
     },
     migliaTag: {
         type: ControlType.String,
-        title: "🍾 Miglia - Type Vin",
+        title: "1️⃣ Bouteille 1 - Type",
         defaultValue: "Vin rouge",
     },
     migliaDomain: {
         type: ControlType.String,
-        title: "🍾 Miglia - Vigneron",
+        title: "1️⃣ Bouteille 1 - Vigneron",
         defaultValue: "MonBissac",
     },
     migliaScale: {
         type: ControlType.Number,
-        title: "🍾 Miglia - Taille",
+        title: "1️⃣ Bouteille 1 - Taille",
         defaultValue: 1.8,
         min: 0.1,
         max: 5,
@@ -236,33 +235,34 @@ addPropertyControls(BottlesViewer, {
     },
     migliaLink: {
         type: ControlType.String,
-        title: "🍾 Miglia - 🔗 Page",
+        title: "1️⃣ Bouteille 1 - 🔗 Page",
         defaultValue: "/product",
     },
 
+    // ── Bouteille 2 ──
     papaUrl: {
         type: ControlType.String,
-        title: "🍷 Papa - URL",
+        title: "2️⃣ Bouteille 2 - URL",
         defaultValue: "https://romainchob.github.io/bouteilles-3d/papa.glb",
     },
     papaLabel: {
         type: ControlType.String,
-        title: "🍷 Papa - Nom",
+        title: "2️⃣ Bouteille 2 - Nom",
         defaultValue: "Papa",
     },
     papaTag: {
         type: ControlType.String,
-        title: "🍷 Papa - Type Vin",
+        title: "2️⃣ Bouteille 2 - Type",
         defaultValue: "Bière ambrée",
     },
     papaDomain: {
         type: ControlType.String,
-        title: "🍷 Papa - Vigneron",
+        title: "2️⃣ Bouteille 2 - Vigneron",
         defaultValue: "MonBissac",
     },
     papaScale: {
         type: ControlType.Number,
-        title: "🍷 Papa - Taille",
+        title: "2️⃣ Bouteille 2 - Taille",
         defaultValue: 1.8,
         min: 0.1,
         max: 5,
@@ -271,33 +271,34 @@ addPropertyControls(BottlesViewer, {
     },
     papaLink: {
         type: ControlType.String,
-        title: "🍷 Papa - 🔗 Page",
+        title: "2️⃣ Bouteille 2 - 🔗 Page",
         defaultValue: "/product",
     },
 
+    // ── Bouteille 3 ──
     rougeUrl: {
         type: ControlType.String,
-        title: "🔴 Rouge - URL",
+        title: "3️⃣ Bouteille 3 - URL",
         defaultValue: "https://romainchob.github.io/bouteilles-3d/rougeglb.glb",
     },
     rougeLabel: {
         type: ControlType.String,
-        title: "🔴 Rouge - Nom",
+        title: "3️⃣ Bouteille 3 - Nom",
         defaultValue: "Rouge",
     },
     rougeTag: {
         type: ControlType.String,
-        title: "🔴 Rouge - Type Vin",
+        title: "3️⃣ Bouteille 3 - Type",
         defaultValue: "Vin blanc",
     },
     rougeDomain: {
         type: ControlType.String,
-        title: "🔴 Rouge - Vigneron",
+        title: "3️⃣ Bouteille 3 - Vigneron",
         defaultValue: "Domaine du haut bourg",
     },
     rougeScale: {
         type: ControlType.Number,
-        title: "🔴 Rouge - Taille",
+        title: "3️⃣ Bouteille 3 - Taille",
         defaultValue: 1.8,
         min: 0.1,
         max: 5,
@@ -306,33 +307,34 @@ addPropertyControls(BottlesViewer, {
     },
     rougeLink: {
         type: ControlType.String,
-        title: "🔴 Rouge - 🔗 Page",
+        title: "3️⃣ Bouteille 3 - 🔗 Page",
         defaultValue: "/product",
     },
 
+    // ── Bouteille 4 ──
     biereUrl: {
         type: ControlType.String,
-        title: "🍺 Bière - URL",
+        title: "4️⃣ Bouteille 4 - URL",
         defaultValue: "https://romainchob.github.io/bouteilles-3d/bierre.glb",
     },
     biereLabel: {
         type: ControlType.String,
-        title: "🍺 Bière - Nom",
+        title: "4️⃣ Bouteille 4 - Nom",
         defaultValue: "Aperitivo",
     },
     biereTag: {
         type: ControlType.String,
-        title: "🍺 Bière - Type Vin",
+        title: "4️⃣ Bouteille 4 - Type",
         defaultValue: "Apéritif",
     },
     biereDomain: {
         type: ControlType.String,
-        title: "🍺 Bière - Vigneron",
+        title: "4️⃣ Bouteille 4 - Vigneron",
         defaultValue: "MonBissac",
     },
     biereScale: {
         type: ControlType.Number,
-        title: "🍺 Bière - Taille",
+        title: "4️⃣ Bouteille 4 - Taille",
         defaultValue: 1.1,
         min: 0.1,
         max: 5,
@@ -341,33 +343,34 @@ addPropertyControls(BottlesViewer, {
     },
     biereLink: {
         type: ControlType.String,
-        title: "🍺 Bière - 🔗 Page",
+        title: "4️⃣ Bouteille 4 - 🔗 Page",
         defaultValue: "/product",
     },
 
+    // ── Bouteille 5 ──
     canetteUrl: {
         type: ControlType.String,
-        title: "🥫 Cannette - URL",
+        title: "5️⃣ Bouteille 5 - URL",
         defaultValue: "https://romainchob.github.io/bouteilles-3d/Canette2.glb",
     },
     canetteLabel: {
         type: ControlType.String,
-        title: "🥫 Cannette - Nom",
+        title: "5️⃣ Bouteille 5 - Nom",
         defaultValue: "La Petite Filoute",
     },
     canetteTag: {
         type: ControlType.String,
-        title: "🥫 Cannette - Type Vin",
+        title: "5️⃣ Bouteille 5 - Type",
         defaultValue: "Soda",
     },
     canetteDomain: {
         type: ControlType.String,
-        title: "🥫 Cannette - Vigneron",
+        title: "5️⃣ Bouteille 5 - Vigneron",
         defaultValue: "MonBissac",
     },
     canetteScale: {
         type: ControlType.Number,
-        title: "🥫 Cannette - Taille",
+        title: "5️⃣ Bouteille 5 - Taille",
         defaultValue: 0.8,
         min: 0.1,
         max: 5,
@@ -376,10 +379,11 @@ addPropertyControls(BottlesViewer, {
     },
     canetteLink: {
         type: ControlType.String,
-        title: "🥫 Cannette - 🔗 Page",
+        title: "5️⃣ Bouteille 5 - 🔗 Page",
         defaultValue: "/product",
     },
 
+    // ── Caméra & Scène ──
     cameraDistance: {
         type: ControlType.Number,
         title: "📷 Caméra",
